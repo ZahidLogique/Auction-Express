@@ -1,0 +1,24 @@
+{
+  "name": "cworks-qa-automation",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "bddgen test && playwright test",
+    "test:login": "bddgen test && playwright test --project=login",
+    "report": "allure generate allure-results --clean -o allure-report && allure open allure-report",
+    "report:serve": "allure serve allure-results"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^24.10.2",
+    "allure-commandline": "^2.38.1",
+    "allure-playwright": "^3.7.1",
+    "dotenv": "^17.2.3",
+    "playwright-bdd": "^8.5.0",
+    "typescript": "^6.0.2"
+  }
+}

@@ -1,0 +1,31 @@
+
+# Dependencies
+node_modules/
+
+# Environment variables (berisi kredensial - JANGAN di-commit)
+.env
+
+# Auth state (berisi session cookie - JANGAN di-commit)
+.auth/
+
+# Playwright output
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# Allure
+/allure-results/
+/allure-report/
+
+# Screenshots (auto-generated setiap run)
+/screenshots/
+
+# playwright-bdd generated test files
+/.features-gen/
+
+# Test result JSON
+test-results.json
+
+# Claude Code local settings
+.claude/

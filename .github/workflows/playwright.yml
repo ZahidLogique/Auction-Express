@@ -1,0 +1,245 @@
+name: Playwright Tests
+on:
+  schedule:
+    - cron: "0 2 * * 1-5" # Run every day at 2:00 AM UTC (Monday to Friday)
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    # 1. Setup Node dengan Caching NPM otomatis
+    # Ini akan mempercepat 'npm ci'
+    - uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Install Playwright OS Dependencies
+      run: npx playwright install-deps
+
+    # 2. Caching Playwright Browsers (Bagian Paling Penting)
+    # Kita cek apakah ada cache browser yang cocok dengan package-lock.json saat ini
+    - name: Cache Playwright Browsers
+      id: playwright-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-playwright-
+    
+
+    # 3. Install Browser HANYA jika Cache tidak ditemukan
+    # Logikanya: Kalau cache ketemu, skip langkah download ini. Hemat waktu banyak!
+    - name: Install Playwright Browsers
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      run: npx playwright install
+
+    - name: Run Playwright tests
+      id: playwright-tests
+      continue-on-error: true
+      run: |
+        npx playwright test 2>&1 | tee test-output.txt || TEST_EXIT_CODE=$?
+        echo "exit_code=${TEST_EXIT_CODE:-0}" >> $GITHUB_OUTPUT
+      env:
+        BASE_URL: ${{ secrets.BASE_URL }}
+        BASIC_AUTH_USER: ${{ secrets.BASIC_AUTH_USER }}
+        BASIC_AUTH_PASS: ${{ secrets.BASIC_AUTH_PASS }}
+        COMMON_PASSWORD: ${{ secrets.COMMON_PASSWORD }}
+        APP_EMAIL: ${{ secrets.APP_EMAIL }}
+        APP_PASS: ${{ secrets.APP_PASS }}
+        CI: true
+
+    - name: Parse test results
+      id: test-results
+      if: always()
+      run: |
+        # Try to parse from JSON first
+        if [ -f test-results.json ]; then
+          # Count total tests (each test can have multiple runs due to retries)
+          TOTAL=$(jq '[.suites[].specs[].tests[]] | length' test-results.json 2>/dev/null || echo "0")
+          PASSED=$(jq '[.suites[].specs[].tests[] | select(.results[0].status == "passed")] | length' test-results.json 2>/dev/null || echo "0")
+          FAILED=$(jq '[.suites[].specs[].tests[] | select(.results[0].status == "failed")] | length' test-results.json 2>/dev/null || echo "0")
+          SKIPPED=$(jq '[.suites[].specs[].tests[] | select(.results[0].status == "skipped")] | length' test-results.json 2>/dev/null || echo "0")
+          
+          # Count unique test specs (scenarios)
+          TOTAL_SPECS=$(jq '[.suites[].specs[]] | length' test-results.json 2>/dev/null || echo "0")
+        else
+          TOTAL=0
+          PASSED=0
+          FAILED=0
+          SKIPPED=0
+          TOTAL_SPECS=0
+        fi
+        
+        # Fallback: try to parse from test output
+        if [ "$TOTAL" == "0" ] && [ -f test-output.txt ]; then
+          # Extract numbers from Playwright output like "X passed, Y failed"
+          if grep -q "passed\|failed" test-output.txt; then
+            PASSED=$(grep -oE '[0-9]+ passed' test-output.txt | grep -oE '[0-9]+' | head -1 || echo "0")
+            FAILED=$(grep -oE '[0-9]+ failed' test-output.txt | grep -oE '[0-9]+' | head -1 || echo "0")
+            SKIPPED=$(grep -oE '[0-9]+ skipped' test-output.txt | grep -oE '[0-9]+' | head -1 || echo "0")
+            TOTAL=$((PASSED + FAILED + SKIPPED))
+            TOTAL_SPECS=$TOTAL
+          fi
+        fi
+        
+        echo "total=${TOTAL:-0}" >> $GITHUB_OUTPUT
+        echo "passed=${PASSED:-0}" >> $GITHUB_OUTPUT
+        echo "failed=${FAILED:-0}" >> $GITHUB_OUTPUT
+        echo "skipped=${SKIPPED:-0}" >> $GITHUB_OUTPUT
+        echo "total_specs=${TOTAL_SPECS:-0}" >> $GITHUB_OUTPUT
+        
+        echo "Test Results Summary:"
+        echo "  Total: ${TOTAL:-0}"
+        echo "  Passed: ${PASSED:-0}"
+        echo "  Failed: ${FAILED:-0}"
+        echo "  Skipped: ${SKIPPED:-0}"
+        echo "  Total Specs: ${TOTAL_SPECS:-0}"
+
+    - uses: actions/upload-artifact@v4
+      if: always()
+      id: upload-report
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30
+
+    - name: Upload test results JSON
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-json
+        path: test-results.json
+        retention-days: 7
+        if-no-files-found: ignore
+
+    - name: Send Slack Notification
+      if: always()
+      run: |
+        if [ -z "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+          echo "SLACK_WEBHOOK_URL secret is not set. Skipping notification."
+          exit 0
+        fi
+        
+        if [ "${{ job.status }}" == "success" ]; then
+          STATUS_EMOJI="✅"
+          STATUS_TEXT="Automation Tests Passed"
+          STATUS_COLOR="good"
+        else
+          STATUS_EMOJI="❌"
+          STATUS_TEXT="Automation Tests Failed"
+          STATUS_COLOR="danger"
+        fi
+        
+        TOTAL="${{ steps.test-results.outputs.total }}"
+        PASSED="${{ steps.test-results.outputs.passed }}"
+        FAILED="${{ steps.test-results.outputs.failed }}"
+        SKIPPED="${{ steps.test-results.outputs.skipped }}"
+        TOTAL_SPECS="${{ steps.test-results.outputs.total_specs }}"
+        
+        WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        COMMIT_MSG="${{ github.event.head_commit.message }}"
+        COMMIT_URL="${{ github.event.head_commit.url }}"
+        
+        # Build test summary
+        TEST_SUMMARY="*Total Scenarios:* ${TOTAL_SPECS:-${TOTAL:-0}}\n*Total Tests:* ${TOTAL:-0}\n*Passed:* ${PASSED:-0} ✅\n*Failed:* ${FAILED:-0} ❌"
+        if [ "${SKIPPED:-0}" != "0" ]; then
+          TEST_SUMMARY="${TEST_SUMMARY}\n*Skipped:* ${SKIPPED:-0} ⏭️"
+        fi
+        
+        # Add artifact info
+        ARTIFACT_INFO="📦 *Artifacts:*\n• HTML Report: Available in workflow run\n• Test Results JSON: Available in workflow run"
+        
+        PAYLOAD=$(cat <<EOF
+        {
+          "text": "${STATUS_EMOJI} ${STATUS_TEXT}",
+          "blocks": [
+            {
+              "type": "header",
+              "text": {
+                "type": "plain_text",
+                "text": "${STATUS_EMOJI} ${STATUS_TEXT}"
+              }
+            },
+            {
+              "type": "section",
+              "fields": [
+                {
+                  "type": "mrkdwn",
+                  "text": "*Repository:*\n${{ github.repository }}"
+                },
+                {
+                  "type": "mrkdwn",
+                  "text": "*Branch:*\n${{ github.ref_name }}"
+                },
+                {
+                  "type": "mrkdwn",
+                  "text": "*Author:*\n${{ github.actor }}"
+                },
+                {
+                  "type": "mrkdwn",
+                  "text": "*Workflow:*\n${{ github.workflow }}"
+                }
+              ]
+            },
+            {
+              "type": "section",
+              "text": {
+                "type": "mrkdwn",
+                "text": "*Test Results:*\n${TEST_SUMMARY}"
+              }
+            },
+            {
+              "type": "section",
+              "text": {
+                "type": "mrkdwn",
+                "text": "${ARTIFACT_INFO}"
+              }
+            },
+            {
+              "type": "section",
+              "text": {
+                "type": "mrkdwn",
+                "text": "*Commit:*\n<${COMMIT_URL}|${COMMIT_MSG}>"
+              }
+            },
+            {
+              "type": "actions",
+              "elements": [
+                {
+                  "type": "button",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "View Workflow & Download Artifacts"
+                  },
+                  "url": "${WORKFLOW_URL}",
+                  "style": "primary"
+                }
+              ]
+            }
+          ],
+          "attachments": [
+            {
+              "color": "${STATUS_COLOR}",
+              "footer": "GitHub Actions",
+              "ts": $(date +%s)
+            }
+          ]
+        }
+        EOF
+        )
+        
+        curl -X POST -H 'Content-type: application/json' \
+          --data "${PAYLOAD}" \
+          "${{ secrets.SLACK_WEBHOOK_URL }}"
