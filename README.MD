@@ -1,6 +1,6 @@
-# TTA Backoffice — QA Automation
+# Auction Express — QA Automation
 
-Proyek automation testing end-to-end menggunakan **Playwright** + **TypeScript** untuk aplikasi TTA Backoffice. Mengimplementasikan **Page Object Model (POM)**, screenshot otomatis di setiap critical step, dan **Allure Report** untuk pelaporan hasil test.
+Proyek automation testing end-to-end menggunakan **Playwright** + **TypeScript** untuk aplikasi Auction Express Backoffice. Mengimplementasikan **Page Object Model (POM)**, screenshot otomatis di setiap critical step, dan **Allure Report** untuk pelaporan hasil test.
 
 ---
 
@@ -25,7 +25,7 @@ Pastikan sudah terinstall sebelum memulai:
 
 ```bash
 git clone <repository-url>
-cd TTA
+cd "Auction Express"
 ```
 
 ### 2. Install dependencies
@@ -51,7 +51,7 @@ cp .env.example .env
 Isi file `.env`:
 
 ```env
-BASE_URL=https://backoffice.stg.taa.com.ph/
+BASE_URL=https://backoffice.ax-stg.lgq-stg.com/
 
 APP_USERNAME=your_username
 APP_PASSWORD=your_password
@@ -147,7 +147,7 @@ Report akan terbuka otomatis di browser. Di dalamnya tersedia:
 ## Struktur Proyek
 
 ```
-TTA/
+Auction Express/
 ├── .auth/                       # Storage state session login (auto-generated)
 ├── allure-report/               # HTML report Allure (auto-generated)
 ├── allure-results/              # Raw data Allure (auto-generated)
