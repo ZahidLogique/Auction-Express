@@ -88,11 +88,11 @@ export class MembershipPage {
   // ── Navigation ────────────────────────────────────────────────────────────
 
   async goto() {
-    await this.page.goto("/membership-management/membership");
+    await this.page.goto("/en/membership-management/membership");
   }
 
   async gotoCreate() {
-    await this.page.goto("/membership-management/membership/create");
+    await this.page.goto("/en/membership-management/membership/create");
   }
 
   // ── Form Actions ──────────────────────────────────────────────────────────

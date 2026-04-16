@@ -12,7 +12,7 @@ export interface UserData {
   email:    string;
   position: string;
   phone:    string;
-  mobile:   string;
+  password: string;
 }
 
 function randDigits(length: number): string {
@@ -61,7 +61,7 @@ export function generateUser(): UserData {
     fullName,
     email,
     position: "QA Engineer",
-    phone:    `021${randDigits(8)}`,   // e.g. 02134567890
-    mobile:   `0812${randDigits(8)}`,  // e.g. 081234567890
+    phone:    `021${randDigits(8)}`,        // e.g. 02134567890
+    password: `Test@${randDigits(4)}`,      // e.g. Test@1234
   };
 }

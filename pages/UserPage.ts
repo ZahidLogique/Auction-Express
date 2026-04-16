@@ -6,19 +6,21 @@ export class UserPage {
   // ── List Page ─────────────────────────────────────────────────────────────
   readonly addUserButton: Locator;
   readonly searchInput:   Locator;
+  readonly searchButton:  Locator;
 
-  // ── Modal Form ────────────────────────────────────────────────────────────
-  readonly locationCabuyao:     Locator;
-  readonly usernameInput:       Locator;
-  readonly roleDropdownTrigger: Locator;
-  readonly roleFilterInput:     Locator;
-  readonly fullNameInput:       Locator;
-  readonly emailInput:          Locator;
-  readonly positionsInput:      Locator;
-  readonly phoneInput:          Locator;
-  readonly mobileInput:         Locator;
-  readonly statusSelect:        Locator;
-  readonly saveButton:          Locator;
+  // ── Add User Modal ─────────────────────────────────────────────────────────
+  readonly usernameInput:        Locator;
+  readonly fullNameInput:        Locator;
+  readonly emailInput:           Locator;
+  readonly positionsInput:       Locator;
+  readonly phoneInput:           Locator;
+  readonly passwordInput:        Locator;
+  readonly passwordConfirmInput: Locator;
+  readonly addSaveButton:        Locator;
+
+  // ── Edit User Modal ────────────────────────────────────────────────────────
+  readonly editFullNameInput: Locator;
+  readonly editSaveButton:    Locator;
 
   // ── Delete Confirmation Modal ──────────────────────────────────────────────
   readonly deleteConfirmButton: Locator;
@@ -30,44 +32,35 @@ export class UserPage {
     this.page = page;
 
     // List page
-    this.addUserButton = page.locator('button:has-text("Add User")');
-    this.searchInput   = page.locator('input[placeholder="Search..."]');
+    this.addUserButton = page.locator('button.btn-success[data-toggle="modal"]');
+    this.searchInput   = page.locator('input[placeholder="Keyword..."]');
+    this.searchButton  = page.locator('button[wire\\:click="searchData"]');
 
-    // Location checkboxes (TAA Cabuyao dipilih sebagai default test data)
-    this.locationCabuyao = page.locator('input[type="checkbox"][value="01916e67-ec5f-7e84-bce0-8a2154f3ea83"]');
+    // Add User Modal — semua pakai ID unik
+    this.usernameInput        = page.locator('#username');
+    this.fullNameInput        = page.locator('#full_name');
+    this.emailInput           = page.locator('#email');
+    this.positionsInput       = page.locator('#jabatan');
+    this.phoneInput           = page.locator('#phone_number');
+    this.passwordInput        = page.locator('#password');
+    this.passwordConfirmInput = page.locator('#password_confirmation');
+    this.addSaveButton        = page.locator('#add-user-modal button[type="submit"]');
 
-    // Form inputs
-    this.usernameInput  = page.locator('input[placeholder="Username"]');
-    this.fullNameInput  = page.locator('input[placeholder="Full Name"]');
-    this.emailInput     = page.locator('input[placeholder="Email"]');
-    this.positionsInput = page.locator('input[placeholder="Positions"]');
-    this.phoneInput     = page.locator('input[placeholder="Phone Number"]');
-    this.mobileInput    = page.locator('input[placeholder="Mobile Number"]');
-
-    // Role — custom Alpine.js dropdown (bukan native <select>)
-    this.roleDropdownTrigger = page.locator('#selectfield + span');
-    this.roleFilterInput     = page.locator('[x-ref="filterinput"]');
-
-    // Status — native <select> satu-satunya yang punya option value="1"
-    this.statusSelect = page.locator('select').filter({
-      has: page.locator('option[value="1"]'),
-    });
-
-    // Submit
-    this.saveButton = page.locator('button[type="submit"]:has-text("Save")');
+    // Edit User Modal
+    this.editFullNameInput = page.locator('#e-full-name');
+    this.editSaveButton    = page.locator('#edit-user-modal button[type="submit"]');
 
     // Delete confirmation
-    this.deleteConfirmButton = page.locator('button:has-text("Yes")');
+    this.deleteConfirmButton = page.locator('#delete-user-modal button[type="submit"]');
 
-    // Toast sukses: elemen dalam #toaster yang punya class green (Alpine binding)
-    // Error toast pakai class red — selector ini tidak akan menangkap error toast
-    this.toastSuccess = page.locator('#toaster [class*="green"]').first();
+    // Success notification
+    this.toastSuccess = page.locator('.alert-success').first();
   }
 
   // ── Navigation ────────────────────────────────────────────────────────────
 
   async goto() {
-    await this.page.goto("/user-management/users");
+    await this.page.goto("/en/user-management/users");
   }
 
   // ── List Page Actions ─────────────────────────────────────────────────────
@@ -77,48 +70,54 @@ export class UserPage {
     await this.usernameInput.waitFor({ state: "visible" });
   }
 
-  /** Cari user di tabel, tunggu debounce 700ms + networkidle */
+  /** Cari user: isi keyword lalu klik tombol Search */
   async searchUser(username: string) {
     await this.searchInput.fill(username);
-    await this.page.waitForTimeout(800); // debounce 700ms
+    await this.searchButton.click();
     await this.page.waitForLoadState("networkidle");
   }
 
-  /** Locator untuk baris tabel yang mengandung username */
+  /** Locator baris tabel yang mengandung username */
   getRow(username: string): Locator {
     return this.page
-      .locator("tbody tr")
+      .locator("#tbl-user tbody tr")
       .filter({ hasText: username });
   }
 
   /** Klik tombol Edit (kuning) pada baris user yang dicari */
   async clickEditInRow(username: string) {
-    await this.getRow(username).locator("button.bg-yellow-400").click();
-    await this.usernameInput.waitFor({ state: "visible" });
+    await this.getRow(username)
+      .locator('button.btn-warning[title="Edit User"]')
+      .click();
+    await this.editFullNameInput.waitFor({ state: "visible" });
   }
 
   /** Klik tombol Delete (merah) pada baris user yang dicari */
   async clickDeleteInRow(username: string) {
-    await this.getRow(username).locator("button.bg-red-700").click();
+    await this.getRow(username)
+      .locator('button.btn-danger[title="Remove User"]')
+      .click();
     await this.deleteConfirmButton.waitFor({ state: "visible" });
   }
 
-  /** Konfirmasi hapus di modal konfirmasi */
+  /** Konfirmasi hapus */
   async confirmDelete() {
     await this.deleteConfirmButton.click();
   }
 
   // ── Form Actions ──────────────────────────────────────────────────────────
 
-  async selectRole(roleName: string) {
-    await this.roleDropdownTrigger.click();
-    await this.roleFilterInput.waitFor({ state: "visible" });
-    await this.roleFilterInput.fill(roleName);
-    await this.page
-      .locator(".absolute.z-10 ul li")
-      .filter({ hasText: roleName })
-      .first()
-      .click();
+  /** Pilih opsi di Select2 dropdown berdasarkan ID container dan label teks */
+  async selectSelect2(containerId: string, optionText: string) {
+    // Klik visible Select2 container untuk buka dropdown
+    await this.page.locator(`#${containerId}`).click();
+    // Tunggu dropdown muncul dan stabil
+    const option = this.page
+      .locator(".select2-results__option")
+      .filter({ hasText: optionText })
+      .first();
+    await option.waitFor({ state: "visible" });
+    await option.click();
   }
 
   async fillForm(data: {
@@ -128,28 +127,76 @@ export class UserPage {
     role:     string;
     position: string;
     phone:    string;
-    mobile:   string;
+    password: string;
   }) {
-    // ── Step 1: Isi field wire:model.LIVE terlebih dahulu ─────────────────
-    await this.locationCabuyao.check();
+    // ── Step 1: Role (wire:model LIVE) via Select2 → triggers Livewire re-render
+    await this.page.locator("#role_id").selectOption({ label: data.role }, { force: true });
     await this.page.waitForLoadState("networkidle");
 
-    await this.selectRole(data.role);
-    await this.page.waitForLoadState("networkidle");
+    // ── Step 2: Set ALL remaining fields via Livewire JS API in one batch ──────
+    // Multiple synchronous set() calls are batched by Livewire into ONE request,
+    // so there is only one re-render — eliminating the race-condition where
+    // sequential dispatchEvent / fill calls clear each other's values.
+    await this.page.evaluate(
+      (params: {
+        username: string; fullName: string; email: string;
+        position: string; phone: string; password: string;
+      }) => {
+        // ── Find the Livewire component that owns the Add User modal form ────
+        const anchor = document.querySelector("#username") as Element | null;
+        let node: Element | null = anchor;
+        while (node && !node.hasAttribute("wire:id")) {
+          node = node.parentElement;
+        }
+        const componentId = node?.getAttribute("wire:id");
+        if (!componentId) throw new Error("Livewire component not found");
 
-    await this.statusSelect.selectOption("1"); // Active
-    await this.page.waitForLoadState("networkidle");
+        // Support both Livewire 2 (window.livewire) and 3 (window.Livewire)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const lw = (window as any).Livewire ?? (window as any).livewire;
+        const comp = lw.find(componentId);
 
-    // ── Step 2: Baru isi field wire:model.DEFER ───────────────────────────
-    await this.usernameInput.fill(data.username);
-    await this.fullNameInput.fill(data.fullName);
-    await this.emailInput.fill(data.email);
-    await this.positionsInput.fill(data.position);
-    await this.phoneInput.fill(data.phone);
-    await this.mobileInput.fill(data.mobile);
+        // ── Read Bangna's UUID from the #location_id select ──────────────────
+        const locSelect = document.querySelector(
+          "#location_id"
+        ) as HTMLSelectElement | null;
+        const bangnaVal = locSelect
+          ? Array.from(locSelect.options).find((o) =>
+              o.text.trim() === "Bangna"
+            )?.value ?? ""
+          : "";
+
+        // ── Batch all set() calls synchronously so Livewire sends one request ─
+        comp.set("item.status",              "1");           // Active
+        comp.set("item.location_id",         bangnaVal ? [bangnaVal] : []);
+        comp.set("item.is_satellite",        "1");           // No
+        comp.set("item.jabatan",             params.position);
+        comp.set("item.phone_number",        params.phone);
+        comp.set("item.username",            params.username);
+        comp.set("item.full_name",           params.fullName);
+        comp.set("item.email",               params.email);
+        comp.set("item.password",            params.password);
+        comp.set("item.password_confirmation", params.password);
+      },
+      {
+        username: data.username,
+        fullName: data.fullName,
+        email:    data.email,
+        position: data.position,
+        phone:    data.phone,
+        password: data.password,
+      }
+    );
+
+    // Wait for Livewire to finish processing the batched set() calls
+    await this.page.waitForLoadState("networkidle");
   }
 
   async submit() {
-    await this.saveButton.click();
+    await this.addSaveButton.click();
+  }
+
+  async submitEdit() {
+    await this.editSaveButton.click();
   }
 }

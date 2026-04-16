@@ -8,7 +8,7 @@ Feature: AX Backoffice - User Management
   Scenario: TC-USER-001: Berhasil membuat user baru dengan data lengkap
     Given saya berada di halaman User Management
     When saya membuka form tambah user baru
-    And saya mengisi form dengan data user yang valid dan role Admin
+    And saya mengisi form dengan data user yang valid dan role Auctioneer
     And saya menyimpan data user
     Then seharusnya muncul notifikasi sukses pembuatan user
 

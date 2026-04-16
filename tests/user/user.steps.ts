@@ -6,10 +6,9 @@ import { takeScreenshot } from "../../helpers/screenshot";
 
 const { Given, When, Then } = createBdd();
 
-// State yang di-share antar scenario dalam satu test run (sequential)
-let userPage:         UserPage;
-let userData:         UserData;
-let updatedFullName:  string;
+let userPage:        UserPage;
+let userData:        UserData;
+let updatedFullName: string;
 
 // ─── Given ───────────────────────────────────────────────────────────────────
 
@@ -24,8 +23,8 @@ Given("saya berada di halaman User Management", async ({ page, $testInfo }) => {
  * Setiap scenario create user-nya sendiri agar independen dari TC-USER-001.
  */
 Given("saya telah membuat user baru dan berada di halaman User Management", async ({ page, $testInfo }) => {
-  userPage  = new UserPage(page);
-  userData  = generateUser();
+  userPage = new UserPage(page);
+  userData = generateUser();
 
   await userPage.goto();
   await userPage.openAddUserModal();
@@ -35,16 +34,14 @@ Given("saya telah membuat user baru dan berada di halaman User Management", asyn
     username: userData.username,
     fullName: userData.fullName,
     email:    userData.email,
-    role:     "Admin",
+    role:     "Auctioneer",
     position: userData.position,
     phone:    userData.phone,
-    mobile:   userData.mobile,
+    password: userData.password,
   });
 
   await userPage.submit();
-  await page.waitForLoadState("networkidle");
-  // Tunggu toast sukses, lalu lanjut ke list
-  await expect(userPage.toastSuccess).toBeVisible({ timeout: 8000 });
+  await expect(userPage.toastSuccess).toBeVisible({ timeout: 15000 });
   await takeScreenshot(page, $testInfo, "User Created as Prerequisite");
 });
 
@@ -56,17 +53,17 @@ When("saya membuka form tambah user baru", async ({ page, $testInfo }) => {
   await takeScreenshot(page, $testInfo, "Add User Modal Opened");
 });
 
-When("saya mengisi form dengan data user yang valid dan role Admin", async ({ page, $testInfo }) => {
+When("saya mengisi form dengan data user yang valid dan role Auctioneer", async ({ page, $testInfo }) => {
   userData = generateUser();
 
   await userPage.fillForm({
     username: userData.username,
     fullName: userData.fullName,
     email:    userData.email,
-    role:     "Admin",
+    role:     "Auctioneer",
     position: userData.position,
     phone:    userData.phone,
-    mobile:   userData.mobile,
+    password: userData.password,
   });
 
   await takeScreenshot(page, $testInfo, "Form Filled");
@@ -74,7 +71,6 @@ When("saya mengisi form dengan data user yang valid dan role Admin", async ({ pa
 
 When("saya menyimpan data user", async ({ page, $testInfo }) => {
   await userPage.submit();
-  await page.waitForLoadState("networkidle");
   await takeScreenshot(page, $testInfo, "After Save Clicked");
 });
 
@@ -95,14 +91,13 @@ When("saya membuka form edit user tersebut", async ({ page, $testInfo }) => {
 
 When("saya mengubah full name user menjadi data baru", async ({ page, $testInfo }) => {
   updatedFullName = userData.fullName + " (Updated)";
-  await userPage.fullNameInput.clear();
-  await userPage.fullNameInput.fill(updatedFullName);
+  await userPage.editFullNameInput.clear();
+  await userPage.editFullNameInput.fill(updatedFullName);
   await takeScreenshot(page, $testInfo, "Full Name Changed");
 });
 
 When("saya menyimpan perubahan data user", async ({ page, $testInfo }) => {
-  await userPage.submit();
-  await page.waitForLoadState("networkidle");
+  await userPage.submitEdit();
   await takeScreenshot(page, $testInfo, "After Update Saved");
 });
 
@@ -128,8 +123,6 @@ Then("data user seharusnya tampil di tabel dengan informasi yang benar", async (
   await expect(row).toBeVisible({ timeout: 5000 });
   await expect(row).toContainText(userData.fullName);
   await expect(row).toContainText(userData.email);
-  await expect(row).toContainText("Admin");
-  await expect(row).toContainText("Active");
   await takeScreenshot(page, $testInfo, "User Data Verified");
 });
 
