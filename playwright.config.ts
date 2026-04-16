@@ -5,25 +5,36 @@ import path from "path";
 
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 
-// ─── BDD Config per modul ────────────────────────────────────────────────────
-// Setiap modul baru: tambahkan defineBddConfig di sini dan project-nya di bawah
+// ─── BDD Config per Aplikasi ─────────────────────────────────────────────────
 
-const loginTestDir = defineBddConfig({
-  features: "tests/login/*.feature",
-  steps: ["tests/login/*.steps.ts"],
-  outputDir: ".features-gen/login",
+const backofficeTestDir = defineBddConfig({
+  features: "tests/backoffice/features/**/*.feature",
+  steps: ["tests/backoffice/steps/**/*.ts"],
+  outputDir: ".features-gen/backoffice",
 });
 
-const userTestDir = defineBddConfig({
-  features: "tests/user/*.feature",
-  steps: ["tests/user/*.steps.ts"],
-  outputDir: ".features-gen/user",
+const feAuctionTestDir = defineBddConfig({
+  features: "tests/fe-auction/features/**/*.feature",
+  steps: ["tests/fe-auction/steps/**/*.ts"],
+  outputDir: ".features-gen/fe-auction",
 });
 
-const membershipTestDir = defineBddConfig({
-  features: "tests/membership/*.feature",
-  steps: ["tests/membership/*.steps.ts"],
-  outputDir: ".features-gen/membership",
+const feConductorTestDir = defineBddConfig({
+  features: "tests/fe-conductor/features/**/*.feature",
+  steps: ["tests/fe-conductor/steps/**/*.ts"],
+  outputDir: ".features-gen/fe-conductor",
+});
+
+const regressionTestDir = defineBddConfig({
+  features: "tests/regression/features/**/*.feature",
+  // KUNCI: Regression memuat SEMUA steps agar bisa reuse modul lain
+  steps: [
+    "tests/backoffice/steps/**/*.ts",
+    "tests/fe-auction/steps/**/*.ts",
+    "tests/fe-conductor/steps/**/*.ts",
+    "tests/regression/steps/**/*.ts",
+  ],
+  outputDir: ".features-gen/regression",
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -41,49 +52,77 @@ export default defineConfig({
     ["allure-playwright", { outputFolder: "allure-results", detail: true }],
   ],
   use: {
-    baseURL: process.env.BASE_URL,
+    headless: false,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     viewport: { width: 1920, height: 1080 },
   },
   projects: [
-    // ── Setup: simpan session ke .auth/user.json ──────────────────────────
+    // ── Setup: Simpan session masing-masing aplikasi ──────────────────────────
     {
-      name: "setup",
+      name: "setup-backoffice",
       testDir: "./tests/setup",
-      testMatch: "**/*.setup.ts",
+      testMatch: "backoffice.setup.ts",
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "setup-auction",
+      testDir: "./tests/setup",
+      testMatch: "auction.setup.ts",
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "setup-conductor",
+      testDir: "./tests/setup",
+      testMatch: "conductor.setup.ts",
       use: { ...devices["Desktop Chrome"] },
     },
 
-    // ── Login: tidak butuh session, fresh browser ─────────────────────────
+    // ── Backoffice App (Authenticated) ─────────────────────────────────────────
     {
-      name: "login",
-      testDir: loginTestDir,
-      use: { ...devices["Desktop Chrome"] },
-    },
-
-    // ── User Management (authenticated) ───────────────────────────────────
-    {
-      name: "user",
-      testDir: userTestDir,
+      name: "backoffice",
+      testDir: backofficeTestDir,
       use: {
         ...devices["Desktop Chrome"],
-        storageState: ".auth/user.json",
+        baseURL: process.env.BACKOFFICE_URL,
+        storageState: ".auth/backoffice.json",
       },
-      dependencies: ["setup"],
+      dependencies: ["setup-backoffice"],
     },
 
-    // ── Membership Management ─────────────────────────────────────────────
+    // ── FE Auction App (Authenticated) ─────────────────────────────────────────
     {
-      name: "membership",
-      testDir: membershipTestDir,
+      name: "fe-auction",
+      testDir: feAuctionTestDir,
       use: {
         ...devices["Desktop Chrome"],
-        storageState: ".auth/user.json",
+        baseURL: process.env.FE_AUCTION_URL,
+        storageState: ".auth/auction.json",
       },
-      dependencies: ["setup"],
+      dependencies: ["setup-auction"],
     },
 
-    // ── Modul lain (authenticated): tambahkan di bawah sini ───────────────
+    // ── FE Conductor App (Authenticated) ───────────────────────────────────────
+    {
+      name: "fe-conductor",
+      testDir: feConductorTestDir,
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: process.env.FE_CONDUCTOR_URL,
+        storageState: ".auth/conductor.json",
+      },
+      dependencies: ["setup-conductor"],
+    },
+
+    // ── Regression (E2E Flow across apps) ──────────────────────────────────────
+    {
+      name: "regression",
+      testDir: regressionTestDir,
+      use: {
+        ...devices["Desktop Chrome"],
+      },
+      // Bisa bergantung pada semua setup jika diperlukan session
+      dependencies: ["setup-backoffice", "setup-auction", "setup-conductor"],
+    },
   ],
 });
