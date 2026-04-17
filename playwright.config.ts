@@ -115,14 +115,16 @@ export default defineConfig({
     },
 
     // ── Regression (E2E Flow across apps) ──────────────────────────────────────
+    // Dependencies disesuaikan bertahap sesuai step yang aktif di e2e_flow.feature.
+    // Saat ini hanya step backoffice yang aktif, tambahkan setup-auction & setup-conductor
+    // saat step login customer/conductor sudah diimplementasi.
     {
       name: "regression",
       testDir: regressionTestDir,
       use: {
         ...devices["Desktop Chrome"],
       },
-      // Bisa bergantung pada semua setup jika diperlukan session
-      dependencies: ["setup-backoffice", "setup-auction", "setup-conductor"],
+      dependencies: ["setup-backoffice"],
     },
   ],
 });

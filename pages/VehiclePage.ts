@@ -159,6 +159,13 @@ export class VehiclePage {
     await this.selectFromSelect2("brand_id", data.brand);
     await this.page.waitForLoadState("networkidle");
 
+    // Tunggu dropdown Model benar-benar terisi setelah AJAX selesai
+    // (select2-hidden-accessible harus punya opsi selain placeholder)
+    await this.page.waitForFunction(() => {
+      const sel = document.querySelector("#form-list select.group_type_id") as HTMLSelectElement;
+      return sel && sel.options.length > 1;
+    }, { timeout: 15000 });
+
     // 5. Model / Group Type (Select2, required) → memicu AJAX load Sub Model
     await this.selectFromSelect2("group_type_id", data.groupType);
     await this.page.waitForLoadState("networkidle");

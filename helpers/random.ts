@@ -75,7 +75,7 @@ export function generateVehicle(): VehicleData {
   return {
     licensePlate:  `TST${num}`,        // contoh: TST3847
     province:      "Bangkok",          // ada di dropdown province
-    seller:        "Alberto Spencer",  // nama Inggris → mudah di-search di Select2
+    seller:        "Zahid",  // nama yang ada di sistem
     brand:         "Honda",            // brand yang pasti ada
     groupType:     "Brio",             // model Honda yang terlihat di data list
     color:         "White",
@@ -86,6 +86,48 @@ export function generateVehicle(): VehicleData {
     mileage:       "20000",
     engineNo:      `ENG${randDigits(8)}`,
     vin:           `VIN${randDigits(10)}`,
+  };
+}
+
+// ── Auction Data ──────────────────────────────────────────────────────────────
+
+export interface AuctionData {
+  date:        string;  // DD/MM/YYYY — hari ini
+  location:    string;  // "Bangna" | "Suwintawong"
+  auctionName: string;  // nama event
+  lotNumber:   string;  // lot/auction number
+  lane:        string;  // max 2 karakter
+  auctionType: string;  // "private" | "public"
+  method:      string;  // "online" | "on-site" | "mix"
+  startTimer:  string;  // detik, default 30
+  resetTimer:  string;  // detik, default 10
+  startTime:   string;  // HH:MM format 24h
+  eventType:   string;  // "sequence" | "listings"
+}
+
+/**
+ * Generate data test Auction Calendar baru.
+ * Tanggal selalu hari ini, jam mulai 06:00.
+ */
+export function generateAuction(): AuctionData {
+  const today = new Date();
+  const dd    = String(today.getDate()).padStart(2, "0");
+  const mm    = String(today.getMonth() + 1).padStart(2, "0");
+  const yyyy  = today.getFullYear();
+  const num   = randDigits(4);
+
+  return {
+    date:        `${dd}/${mm}/${yyyy}`,
+    location:    "Bangna",
+    auctionName: `Test Auction ${num}`,
+    lotNumber:   `${num}`,
+    lane:        "1",
+    auctionType: "public",
+    method:      "online",
+    startTimer:  "30",
+    resetTimer:  "10",
+    startTime:   "06:00",
+    eventType:   "sequence",
   };
 }
 

@@ -5,13 +5,17 @@ Feature: Full E2E Auction Regression
     # ── 1. Add Mobil Baru (Backend) ────────────────────────────────────────────
     Given I am on the Backoffice login page
     When I login with valid admin credentials
-    And I add a new vehicle for testing
+    And I add new vehicle 1 for testing
+    And I add new vehicle 2 for testing
+    And I add new vehicle 3 for testing
+    And I add new vehicle 4 for testing
+    And I add new vehicle 5 for testing
 
     # ── 2. Buat Auction (Backend) ──────────────────────────────────────────────
-    # And I create a new auction session
+    And I create a new auction session
 
     # ── 3. Assign mobil & publish (Backend) ───────────────────────────────────
-    # And I assign the new vehicle to the auction session
+    And I assign the new vehicle to the auction session
     # And I publish the auction session
 
     # ── 4. Login customer & conductor ─────────────────────────────────────────
