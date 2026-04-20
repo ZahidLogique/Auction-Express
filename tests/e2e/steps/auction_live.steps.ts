@@ -4,7 +4,7 @@ import type { BrowserContext, Page, TestInfo } from "@playwright/test";
 import { step, attachment } from "allure-js-commons";
 import { ConductorLoginPage } from "../../../pages/conductor/ConductorLoginPage";
 import { FELoginPage } from "../../../pages/fe-auction/FELoginPage";
-import { createdAuctionName } from "./regression.steps";
+import { createdAuctionName } from "./backoffice_setup.steps";
 
 const { When, Then } = createBdd();
 
@@ -145,7 +145,7 @@ When("buyer joins the auction", async ({ $testInfo }) => {
   await step("Buyer - Auction list: select lane then click Join Auction", async () => {
     await attachScreenshot($testInfo, buyerPage, "03 - Buyer Auction List");
 
-    // Gunakan nama auction dari backoffice (createdAuctionName di regression.steps.ts)
+    // Gunakan nama auction dari backoffice (createdAuctionName di backoffice_setup.steps.ts)
     console.log(`[Buyer] Looking for auction: "${createdAuctionName}"`);
 
     // Cari row yang mengandung nama auction, lalu centang checkboxnya

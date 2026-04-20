@@ -13,10 +13,10 @@ const backofficeTestDir = defineBddConfig({
   outputDir: ".features-gen/backoffice",
 });
 
-const feAuctionTestDir = defineBddConfig({
-  features: "tests/fe-auction/features/**/*.feature",
-  steps: ["tests/fe-auction/steps/**/*.ts"],
-  outputDir: ".features-gen/fe-auction",
+const feBuyerTestDir = defineBddConfig({
+  features: "tests/fe-buyer/features/**/*.feature",
+  steps: ["tests/fe-buyer/steps/**/*.ts"],
+  outputDir: ".features-gen/fe-buyer",
 });
 
 const feConductorTestDir = defineBddConfig({
@@ -25,16 +25,16 @@ const feConductorTestDir = defineBddConfig({
   outputDir: ".features-gen/fe-conductor",
 });
 
-const regressionTestDir = defineBddConfig({
-  features: "tests/regression/features/**/*.feature",
-  // KUNCI: Regression memuat SEMUA steps agar bisa reuse modul lain
+const e2eTestDir = defineBddConfig({
+  features: "tests/e2e/features/**/*.feature",
+  // E2E memuat SEMUA steps agar bisa reuse modul lain
   steps: [
     "tests/backoffice/steps/**/*.ts",
-    "tests/fe-auction/steps/**/*.ts",
+    "tests/fe-buyer/steps/**/*.ts",
     "tests/fe-conductor/steps/**/*.ts",
-    "tests/regression/steps/**/*.ts",
+    "tests/e2e/steps/**/*.ts",
   ],
-  outputDir: ".features-gen/regression",
+  outputDir: ".features-gen/e2e",
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -90,10 +90,10 @@ export default defineConfig({
       dependencies: ["setup-backoffice"],
     },
 
-    // ── FE Auction App (Authenticated) ─────────────────────────────────────────
+    // ── FE Buyer / Auction App (Authenticated) ─────────────────────────────────
     {
-      name: "fe-auction",
-      testDir: feAuctionTestDir,
+      name: "fe-buyer",
+      testDir: feBuyerTestDir,
       use: {
         ...devices["Desktop Chrome"],
         baseURL: process.env.FE_AUCTION_URL,
@@ -114,14 +114,13 @@ export default defineConfig({
       dependencies: ["setup-conductor"],
     },
 
-    // ── Regression (E2E Flow across apps) ──────────────────────────────────────
-    // Dependencies disesuaikan bertahap sesuai step yang aktif di e2e_flow.feature.
-    // Saat ini hanya step backoffice yang aktif, tambahkan setup-auction & setup-conductor
-    // saat step login customer/conductor sudah diimplementasi.
+    // ── E2E (Full Flow across apps) ────────────────────────────────────────────
+    // Mencakup: backoffice setup → live auction (conductor + buyer).
+    // fullyParallel: false agar 01_backoffice_setup selesai sebelum 02_auction_live.
     {
-      name: "regression",
-      testDir: regressionTestDir,
-      fullyParallel: false, // E2E harus selesai dulu sebelum auction flow
+      name: "e2e",
+      testDir: e2eTestDir,
+      fullyParallel: false,
       use: {
         ...devices["Desktop Chrome"],
       },
