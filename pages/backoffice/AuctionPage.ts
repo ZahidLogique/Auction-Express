@@ -285,6 +285,11 @@ export class AuctionPage {
    * Livewire re-render tabel setelah search.
    */
   async searchAuction(keyword: string) {
+    // Refresh halaman dulu agar Livewire component dalam state bersih
+    await this.page.reload();
+    await this.page.waitForLoadState("domcontentloaded");
+    await this.page.locator("#jadwallelang tbody").waitFor({ state: "visible", timeout: 15000 });
+
     const searchInput = this.page.locator('input.form-control[wire\\:model\\.defer="search"]');
     await searchInput.fill(keyword);
 

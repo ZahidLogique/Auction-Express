@@ -8,7 +8,25 @@ import { generateAuction } from "../../../helpers/random";
 const { When } = createBdd();
 
 // ── Shared State ──────────────────────────────────────────────────────────────
+
+export interface CreatedVehicle {
+  licensePlate: string;
+  province:     string;
+  seller:       string;
+  brand:        string;
+  groupType:    string;
+  color?:       string;
+  transmission?: string;
+  fuel?:        string;
+  drive?:       string;
+  manufactYear?: string;
+  mileage?:     string;
+  engineNo?:    string;
+  vin?:         string;
+}
+
 const createdLicensePlates: string[] = [];
+export const createdVehicles: CreatedVehicle[] = [];
 export let createdAuctionName: string = "";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -247,6 +265,21 @@ async function addVehicle(
   });
 
   createdLicensePlates.push(licensePlate);
+  createdVehicles.push({
+    licensePlate,
+    province,
+    seller,
+    brand,
+    groupType,
+    color,
+    transmission,
+    fuel,
+    drive,
+    manufactYear,
+    mileage,
+    engineNo,
+    vin,
+  });
 }
 
 // ── 1. Vehicle Steps ──────────────────────────────────────────────────────────

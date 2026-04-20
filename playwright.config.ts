@@ -121,6 +121,7 @@ export default defineConfig({
       name: "e2e",
       testDir: e2eTestDir,
       fullyParallel: false,
+      workers: 1,
       use: {
         ...devices["Desktop Chrome"],
       },
