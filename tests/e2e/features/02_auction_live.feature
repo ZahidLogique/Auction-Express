@@ -24,12 +24,8 @@ Feature: Auction Live Flow
     And conductor clicks sold
     And buyer closes winner notification
 
-    # ── Step 6: Next Lot (Lot 2) ──────────────────────────────────────────────
+    # ── Step 6: Lot 2 (No Winner / Unsold) ──────────────────────────────────
     When conductor moves to next lot
     And conductor enables bidding
-    And buyer places a bid
-    Then bid price should be updated on both sides
     When conductor starts countdown
-    Then buyer should see bid success
-    And conductor clicks sold
-    And buyer closes winner notification
+    Then conductor clicks unsold
