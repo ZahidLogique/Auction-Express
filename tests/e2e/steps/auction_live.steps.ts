@@ -4,7 +4,7 @@ import type { BrowserContext, Page, TestInfo } from "@playwright/test";
 import { step, attachment } from "allure-js-commons";
 import { ConductorLoginPage } from "../../../pages/conductor/ConductorLoginPage";
 import { FELoginPage } from "../../../pages/fe-auction/FELoginPage";
-import { createdAuctionName } from "./regression.steps";
+import { createdAuctionName, createdVehicles, type CreatedVehicle } from "./backoffice_setup.steps";
 
 const { When, Then } = createBdd();
 
@@ -13,6 +13,14 @@ export let buyerPage: Page;
 let conductorContext: BrowserContext;
 let buyerContext: BrowserContext;
 
+// Tracker lot yang sedang berjalan (0-based index ke createdVehicles[])
+let currentLotIndex = 0;
+
+// Bid price tracking
+const STARTING_PRICE = 100_000;
+const BID_INCREMENT  = 5_000;
+let   currentBidPrice = STARTING_PRICE;
+
 // Helper: attach ke playwright report + allure inline
 async function attachScreenshot(testInfo: TestInfo, page: Page, label: string) {
   const ss = await page.screenshot();
@@ -20,10 +28,85 @@ async function attachScreenshot(testInfo: TestInfo, page: Page, label: string) {
   await testInfo.attach(label, { body: ss, contentType: "image/png" });
 }
 
+// ── Vehicle Data Verification Helpers ────────────────────────────────────────
+
+/**
+ * Baca nilai field dari info panel kendaraan di buyer auction room.
+ * Struktur HTML aktual:
+ *   <div ...><span>Label</span><span class="text-right">Value</span></div>
+ */
+async function getVehicleField(label: string): Promise<string> {
+  const valueSpan = buyerPage
+    .locator("span")
+    .filter({ hasText: new RegExp(`^${label}$`) })
+    .locator("..")
+    .locator("span.text-right")
+    .first();
+
+  const visible = await valueSpan.isVisible({ timeout: 3000 }).catch(() => false);
+  if (visible) {
+    return ((await valueSpan.textContent()) ?? "").trim();
+  }
+  return "";
+}
+
+/**
+ * Cross-verify data kendaraan yang tampil di buyer auction room
+ * dengan data yang disubmit dari backoffice.
+ */
+async function verifyVehicleDataInRoom(
+  vehicle: CreatedVehicle,
+  lotLabel: string,
+  testInfo: TestInfo
+) {
+  await step(`Verify vehicle data in auction room - ${lotLabel}`, async () => {
+    // Tunggu panel info kendaraan siap — indikator: span "Plate No" muncul
+    await buyerPage
+      .locator("span")
+      .filter({ hasText: /^Plate No$/ })
+      .first()
+      .waitFor({ state: "visible", timeout: 15000 });
+
+    // ── Baca semua field dari UI ──────────────────────────────────────────
+    // Catatan: HTML buyer room pakai label "Manufaturing Year" (typo — missing 'c')
+    // Engine No tidak tersedia di info panel buyer room
+    const plateOnScreen   = await getVehicleField("Plate No");
+    const provOnScreen    = await getVehicleField("Province");
+    const yearOnScreen    = await getVehicleField("Manufaturing Year");
+    const fuelOnScreen    = await getVehicleField("Fuel");
+    const colorOnScreen   = await getVehicleField("Color");
+    const vinOnScreen     = await getVehicleField("VIN");
+    const sellerOnScreen  = await getVehicleField("Seller");
+    // Mileage tampil sebagai "18,000 km" — strip koma dan " km" sebelum compare
+    const mileageRaw      = await getVehicleField("Mileage");
+    const mileageOnScreen = mileageRaw.replace(/,/g, "").replace(/\s*km$/i, "").trim();
+
+    // ── Assert semua field sesuai data backoffice ─────────────────────────
+    expect(plateOnScreen,  `[${lotLabel}] Plate No mismatch`).toBe(vehicle.licensePlate);
+    expect(provOnScreen,   `[${lotLabel}] Province mismatch`).toContain(vehicle.province);
+    if (vehicle.manufactYear)
+      expect(yearOnScreen,    `[${lotLabel}] Manufacturing Year mismatch`).toBe(vehicle.manufactYear);
+    if (vehicle.fuel)
+      expect(fuelOnScreen,    `[${lotLabel}] Fuel mismatch`).toContain(vehicle.fuel);
+    if (vehicle.mileage)
+      expect(mileageOnScreen, `[${lotLabel}] Mileage mismatch`).toBe(vehicle.mileage);
+    if (vehicle.color)
+      expect(colorOnScreen,   `[${lotLabel}] Color mismatch`).toContain(vehicle.color);
+    if (vehicle.vin)
+      expect(vinOnScreen,     `[${lotLabel}] VIN mismatch`).toContain(vehicle.vin);
+    if (vehicle.seller)
+      expect(sellerOnScreen,  `[${lotLabel}] Seller mismatch`).toContain(vehicle.seller);
+
+    console.log(`[Buyer] ✅ Vehicle data verified for ${vehicle.licensePlate} (${lotLabel})`);
+    await attachScreenshot(testInfo, buyerPage, `${lotLabel} - Vehicle Data Verified`);
+  });
+}
+
 // ── Step 1: Parallel Login ─────────────────────────────────────────────────
 
 When("conductor and buyer login in parallel", async ({ browser, $testInfo }) => {
   test.setTimeout(300000); // 5 menit — cover full auction flow
+  currentLotIndex = 0; // reset lot tracker untuk setiap test run
   conductorContext = await browser.newContext();
   buyerContext = await browser.newContext();
   conductorPage = await conductorContext.newPage();
@@ -145,7 +228,7 @@ When("buyer joins the auction", async ({ $testInfo }) => {
   await step("Buyer - Auction list: select lane then click Join Auction", async () => {
     await attachScreenshot($testInfo, buyerPage, "03 - Buyer Auction List");
 
-    // Gunakan nama auction dari backoffice (createdAuctionName di regression.steps.ts)
+    // Gunakan nama auction dari backoffice (createdAuctionName di backoffice_setup.steps.ts)
     console.log(`[Buyer] Looking for auction: "${createdAuctionName}"`);
 
     // Cari row yang mengandung nama auction, lalu centang checkboxnya
@@ -182,6 +265,15 @@ When("buyer joins the auction", async ({ $testInfo }) => {
   await step("Buyer - Verify inside auction room", async () => {
     await attachScreenshot($testInfo, buyerPage, "03 - Buyer Inside Auction Room");
   });
+
+  // Cross-verify data kendaraan Lot 1 yang tampil di buyer dengan data backoffice
+  if (createdVehicles.length > currentLotIndex) {
+    await verifyVehicleDataInRoom(
+      createdVehicles[currentLotIndex],
+      `Lot ${currentLotIndex + 1}`,
+      $testInfo
+    );
+  }
 });
 
 // ── Step 3: Enable Bidding ────────────────────────────────────────────────
@@ -215,25 +307,29 @@ When("conductor enables bidding", async ({ $testInfo }) => {
 
     await attachScreenshot($testInfo, conductorPage, "04b - Conductor Starting Price Area");
 
-    // Set Starting Price via evaluate — inputs[1] karena inputs[0] adalah Accept field
-    await conductorPage.evaluate((value) => {
-      const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
-      const target = inputs[1] as HTMLInputElement; // index 1 = Adjust Starting Price
-      if (target) {
-        target.removeAttribute('disabled');
-        target.focus();
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-        setter?.call(target, value);
-        target.dispatchEvent(new Event('input', { bubbles: true }));
-        target.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    }, '100000');
+    // #6: Cari input via parent container button — tidak pakai index agar tidak fragile
+    const startingPriceInput = conductorPage
+      .locator('button:has-text("Adjust Starting Price")')
+      .locator("..")
+      .locator('input[inputmode="decimal"]')
+      .first();
+
+    await startingPriceInput.evaluate((el: HTMLInputElement, value) => {
+      el.removeAttribute("disabled");
+      el.focus();
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+      setter?.call(el, value);
+      el.dispatchEvent(new Event("input",  { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }, String(STARTING_PRICE));
     await conductorPage.waitForTimeout(500);
 
     await adjustStartBtn.click({ force: true });
     await conductorPage.waitForTimeout(1000);
 
-    console.log("[Conductor] Starting price set to 100,000");
+    // Reset bid price tracker untuk lot ini
+    currentBidPrice = STARTING_PRICE;
+    console.log(`[Conductor] Starting price set to ${STARTING_PRICE.toLocaleString("en-US")}`);
     await attachScreenshot($testInfo, conductorPage, "04c - Conductor After Set Starting Price");
   });
 
@@ -241,19 +337,21 @@ When("conductor enables bidding", async ({ $testInfo }) => {
     const adjustReservedBtn = conductorPage.locator('button:has-text("Adjust Reserved Price")');
     await adjustReservedBtn.waitFor({ state: "visible", timeout: 10000 });
 
-    // Set Reserved Price via evaluate — inputs[2] karena inputs[0]=Accept, inputs[1]=Starting Price
-    await conductorPage.evaluate((value) => {
-      const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
-      const target = inputs[2] as HTMLInputElement; // index 2 = Adjust Reserved Price
-      if (target) {
-        target.removeAttribute('disabled');
-        target.focus();
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-        setter?.call(target, value);
-        target.dispatchEvent(new Event('input', { bubbles: true }));
-        target.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    }, '90000');
+    // #6: Cari input via parent container button — tidak pakai index agar tidak fragile
+    const reservedPriceInput = conductorPage
+      .locator('button:has-text("Adjust Reserved Price")')
+      .locator("..")
+      .locator('input[inputmode="decimal"]')
+      .first();
+
+    await reservedPriceInput.evaluate((el: HTMLInputElement, value) => {
+      el.removeAttribute("disabled");
+      el.focus();
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+      setter?.call(el, value);
+      el.dispatchEvent(new Event("input",  { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }, "90000");
     await conductorPage.waitForTimeout(500);
 
     await adjustReservedBtn.click({ force: true });
@@ -313,7 +411,8 @@ When("buyer places a bid", async ({ $testInfo }) => {
     await expect(increaseBtn).toBeEnabled({ timeout: 5000 });
     await increaseBtn.click();
     await buyerPage.waitForTimeout(1000);
-    console.log("[Buyer] Offered +5000");
+    currentBidPrice = STARTING_PRICE + BID_INCREMENT; // 105,000
+    console.log(`[Buyer] Offered +${BID_INCREMENT.toLocaleString("en-US")} → expected bid: ${currentBidPrice.toLocaleString("en-US")}`);
 
     // Handle modal konfirmasi "Are you sure want to bid at X?" jika muncul
     const confirmModal = buyerPage.locator('text=Are you sure want to bid');
@@ -332,13 +431,33 @@ When("buyer places a bid", async ({ $testInfo }) => {
 });
 
 Then("bid price should be updated on both sides", async ({ $testInfo }) => {
-  await step("Verify bid price updated", async () => {
+  await step("Verify bid price updated on both sides", async () => {
     await buyerPage.waitForTimeout(1500);
+
+    // #1: Assert angka bid yang sama tampil di buyer DAN conductor
+    // Format expected: "105,000" (en-US locale)
+    const expectedFormatted = currentBidPrice.toLocaleString("en-US");
+
+    const buyerHasBid = await buyerPage
+      .locator(`text=${expectedFormatted}`)
+      .first()
+      .isVisible({ timeout: 10000 })
+      .catch(() => false);
+
+    const conductorHasBid = await conductorPage
+      .locator(`text=${expectedFormatted}`)
+      .first()
+      .isVisible({ timeout: 10000 })
+      .catch(() => false);
+
+    expect(buyerHasBid,     `[Bid Price] "${expectedFormatted}" tidak tampil di buyer`).toBe(true);
+    expect(conductorHasBid, `[Bid Price] "${expectedFormatted}" tidak tampil di conductor`).toBe(true);
+
+    console.log(`[Verify] ✅ Bid price "${expectedFormatted}" confirmed on both sides`);
     await Promise.all([
       attachScreenshot($testInfo, conductorPage, "05c - Conductor Bid Price Updated"),
       attachScreenshot($testInfo, buyerPage, "05c - Buyer Bid Price Updated"),
     ]);
-    console.log("[Verify] Bid price screenshots captured for both sides");
   });
 });
 
@@ -365,17 +484,22 @@ When("conductor starts countdown", async ({ $testInfo }) => {
 });
 
 Then("buyer should see bid success", async ({ $testInfo }) => {
-  await step("Verify buyer bid success message", async () => {
-    // Cek ada success indicator di buyer — bisa berupa text/toast/badge
-    const successIndicator = buyerPage.locator(
-      'text=success, text=Success, text=won, text=Won, [class*="success"], [class*="winner"]'
-    ).first();
-    const isSuccess = await successIndicator.isVisible({ timeout: 8000 }).catch(() => false);
-    if (isSuccess) {
-      console.log("[Buyer] Bid success indicator visible");
-    } else {
-      console.log("[Buyer] No explicit success indicator, capturing screenshot for review");
-    }
+  await step("Verify buyer is highest bidder after countdown", async () => {
+    // #2: Setelah countdown, buyer harus masih menjadi highest bidder.
+    // Indikator: bid amount buyer (currentBidPrice) masih tampil di halaman buyer.
+    const expectedFormatted = currentBidPrice.toLocaleString("en-US");
+
+    const buyerStillHighest = await buyerPage
+      .locator(`text=${expectedFormatted}`)
+      .first()
+      .isVisible({ timeout: 10000 })
+      .catch(() => false);
+
+    expect(buyerStillHighest,
+      `[Bid Success] Buyer tidak lagi menampilkan bid "${expectedFormatted}" setelah countdown — kemungkinan ter-outbid`
+    ).toBe(true);
+
+    console.log(`[Buyer] ✅ Still highest bidder at "${expectedFormatted}" after countdown`);
     await attachScreenshot($testInfo, buyerPage, "07 - Buyer Bid Result");
   });
 });
@@ -390,47 +514,92 @@ Then("conductor clicks sold", async ({ $testInfo }) => {
     console.log("[Conductor] Clicked Sold");
     await attachScreenshot($testInfo, conductorPage, "08 - Conductor After Sold");
     await attachScreenshot($testInfo, buyerPage, "08 - Buyer After Sold");
+  });
 
-    // Handle modal "The auction winner is..." — klik Continue untuk lanjut
+  await step("Conductor - Verify winner modal and capture winner name", async () => {
+    // #3: Winner modal HARUS muncul setelah Sold — bukan optional
     const winnerModal = conductorPage.locator('text=The auction winner is');
-    const hasModal = await winnerModal.isVisible({ timeout: 5000 }).catch(() => false);
-    if (hasModal) {
-      console.log("[Conductor] Winner modal detected, clicking Continue...");
-      await attachScreenshot($testInfo, conductorPage, "08b - Conductor Winner Modal");
-      const continueBtn = conductorPage.getByRole('button', { name: 'Continue', exact: true });
-      await continueBtn.waitFor({ state: "visible", timeout: 5000 });
-      await continueBtn.click();
-      await conductorPage.waitForTimeout(1000);
-      console.log("[Conductor] Winner modal closed");
-    }
+    await winnerModal.waitFor({ state: "visible", timeout: 10000 });
+
+    // Ambil full teks modal lalu ekstrak nama pemenang
+    const winnerContainer = conductorPage
+      .locator('[class*="modal"], [class*="dialog"], [role="dialog"]')
+      .filter({ has: conductorPage.locator('text=The auction winner is') })
+      .first();
+
+    const modalText = await winnerContainer.textContent({ timeout: 5000 })
+      .catch(() => conductorPage.locator('text=The auction winner is').textContent());
+    const winnerName = (modalText ?? "").replace(/The auction winner is/i, "").trim();
+
+    expect(winnerName, "[Sold] Winner name tidak ditemukan di modal conductor").not.toBe("");
+    console.log(`[Conductor] ✅ Winner: "${winnerName}"`);
+
+    await attachScreenshot($testInfo, conductorPage, "08b - Conductor Winner Modal");
+
+    // Klik Continue untuk advance ke lot berikutnya
+    const continueBtn = conductorPage.getByRole('button', { name: 'Continue', exact: true });
+    await continueBtn.waitFor({ state: "visible", timeout: 5000 });
+    await continueBtn.click();
+    await conductorPage.waitForTimeout(1000);
+    console.log("[Conductor] Winner modal closed, advancing to next lot");
   });
 });
 
 Then("buyer closes winner notification", async ({ $testInfo }) => {
-  await step("Buyer - Close winner modal if shown", async () => {
+  await step("Buyer - Verify winner modal and close", async () => {
+    // #4: Modal "You are the winner" HARUS muncul — buyer pasti menang karena satu-satunya bidder
     const winnerModal = buyerPage.locator('text=You are the winner');
-    const isVisible = await winnerModal.isVisible({ timeout: 5000 }).catch(() => false);
-    if (isVisible) {
-      console.log("[Buyer] Winner modal detected, closing...");
-      await attachScreenshot($testInfo, buyerPage, "09 - Buyer Winner Modal");
-      const closeBtn = buyerPage.getByRole('button', { name: 'Close', exact: true });
-      await closeBtn.waitFor({ state: "visible", timeout: 5000 });
-      await closeBtn.click();
-      await buyerPage.waitForTimeout(1000);
-      console.log("[Buyer] Winner modal closed");
-    } else {
-      console.log("[Buyer] No winner modal shown");
-    }
+    await winnerModal.waitFor({ state: "visible", timeout: 10000 });
+
+    expect(
+      await winnerModal.isVisible(),
+      "[Winner] Modal 'You are the winner' tidak muncul di buyer — kemungkinan buyer bukan pemenang"
+    ).toBe(true);
+
+    console.log("[Buyer] ✅ Winner modal confirmed");
+    await attachScreenshot($testInfo, buyerPage, "09 - Buyer Winner Modal");
+
+    const closeBtn = buyerPage.getByRole('button', { name: 'Close', exact: true });
+    await closeBtn.waitFor({ state: "visible", timeout: 5000 });
+    await closeBtn.click();
+    await buyerPage.waitForTimeout(1000);
+    console.log("[Buyer] Winner modal closed");
     await attachScreenshot($testInfo, buyerPage, "09 - Buyer After Winner Modal");
   });
 });
 
 When("conductor moves to next lot", async ({ $testInfo }) => {
   await step("Conductor - Wait for next lot to load (auto-advance after Continue)", async () => {
-    // Setelah Continue di winner modal, sistem otomatis advance ke lot berikutnya
-    await conductorPage.waitForTimeout(2000);
-    console.log("[Conductor] Moved to next lot (auto-advance)");
-    await attachScreenshot($testInfo, conductorPage, "10 - Conductor Next Lot");
-    await attachScreenshot($testInfo, buyerPage, "10 - Buyer Next Lot");
+    const prevPlate = createdVehicles[currentLotIndex]?.licensePlate ?? "";
+    currentLotIndex++;
+    const nextVehicle = createdVehicles[currentLotIndex];
+
+    console.log(`[Conductor] Advancing to lot ${currentLotIndex + 1}...`);
+
+    if (nextVehicle) {
+      // #7: Assert lot benar-benar berganti — tunggu plate kendaraan BERIKUTNYA muncul di buyer
+      // (bukan hanya waitForTimeout yang tidak reliable)
+      await buyerPage.waitForFunction(
+        (plate) => document.body.innerText.includes(plate),
+        nextVehicle.licensePlate,
+        { timeout: 20000 }
+      );
+      console.log(`[Conductor] ✅ Lot changed: "${prevPlate}" → "${nextVehicle.licensePlate}"`);
+    } else {
+      // Fallback jika sudah lot terakhir
+      await conductorPage.waitForTimeout(2000);
+    }
+
+    await attachScreenshot($testInfo, conductorPage, `${currentLotIndex + 1}0 - Conductor Next Lot`);
+    await attachScreenshot($testInfo, buyerPage,     `${currentLotIndex + 1}0 - Buyer Next Lot`);
   });
+
+  // Cross-verify data kendaraan lot berikutnya yang tampil di buyer
+  if (createdVehicles.length > currentLotIndex) {
+    await verifyVehicleDataInRoom(
+      createdVehicles[currentLotIndex],
+      `Lot ${currentLotIndex + 1}`,
+      $testInfo
+    );
+  }
 });

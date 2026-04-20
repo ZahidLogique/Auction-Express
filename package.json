@@ -13,12 +13,19 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "@playwright/test": "^1.57.0",
+    "@playwright/test": "^1.59.1",
     "@types/node": "^24.10.2",
     "allure-commandline": "^2.38.1",
     "allure-playwright": "^3.7.1",
     "dotenv": "^17.2.3",
+    "playwright": "^1.59.1",
     "playwright-bdd": "^8.5.0",
     "typescript": "^6.0.2"
+  },
+  "dependencies": {
+    "@nodelib/fs.walk": "^3.0.1",
+    "cli-table3": "^0.6.5",
+    "fast-glob": "^3.3.3",
+    "playwright-core": "^1.59.1"
   }
 }

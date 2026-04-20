@@ -12,11 +12,6 @@ Given("I am on the FE Auction login page", async ({ page }) => {
 
 // ─── When ────────────────────────────────────────────────────────────────────
 
-// Kita bisa menggunakan step yang sama atau membedakannya. 
-// Untuk menghindari konflik, jika langkahnya sama persis ("I login with valid admin credentials"), 
-// kita harus memindahkannya ke Global Steps atau membedakan namanya.
-// Saya akan membedakan namanya agar lebih eksplisit untuk sekarang.
-
 When("I login to FE Auction with valid admin credentials", async ({ page }) => {
   const loginPage = new AuctionLoginPage(page);
   await loginPage.login(process.env.ADMIN_USER!, process.env.ADMIN_PASS!);

@@ -195,13 +195,98 @@ export class VehiclePage {
   // ── List Actions ──────────────────────────────────────────────────────────
 
   async searchVehicle(keyword: string) {
-    await this.searchInput.waitFor({ state: "visible", timeout: 15000 });
+    // Halaman list adalah Livewire — jangan gunakan networkidle (tidak pernah resolve).
+    // Cukup tunggu domcontentloaded lalu cari elemen.
+    await this.page.waitForLoadState("domcontentloaded");
+    await this.searchInput.waitFor({ state: "visible", timeout: 30000 });
     await this.searchInput.fill(keyword);
     await this.searchButton.click();
-    await this.page.waitForLoadState("networkidle");
+
+    // Tunggu DataTables selesai: coba nunggu "Processing..." hilang,
+    // kalau tidak muncul dalam 2s langsung lanjut dengan fixed wait.
+    try {
+      const processing = this.page.locator("text=Processing...");
+      await processing.waitFor({ state: "visible", timeout: 2000 });
+      await processing.waitFor({ state: "hidden", timeout: 30000 });
+    } catch {
+      // Processing... tidak muncul atau sudah hilang — tunggu sebentar untuk DOM update
+      await this.page.waitForTimeout(2000);
+    }
   }
 
   getRow(licensePlate: string): Locator {
     return this.page.locator("tbody tr").filter({ hasText: licensePlate });
+  }
+
+  /**
+   * Buka halaman detail vehicle dengan double-click pada baris.
+   * App akan membuka tab baru berisi detail vehicle.
+   * Mengembalikan Page tab baru tersebut.
+   */
+  async clickEditForRow(licensePlate: string): Promise<Page> {
+    const row = this.getRow(licensePlate);
+    await row.waitFor({ state: "visible", timeout: 10000 });
+
+    // Double-click pada baris → membuka tab baru detail vehicle
+    const [newPage] = await Promise.all([
+      this.page.context().waitForEvent("page", { timeout: 20000 }),
+      row.dblclick(),
+    ]);
+
+    // Tunggu halaman show selesai load konten utama (bukan hanya DOM)
+    await newPage.waitForLoadState("load");
+    await newPage.waitForTimeout(2000);
+    return newPage;
+  }
+
+  // ── Detail / Edit Page Readers ────────────────────────────────────────────
+
+  /**
+   * Baca nilai text input pada halaman detail/show berdasarkan CSS class.
+   * Tidak di-scope ke #form-list karena halaman show mungkin pakai ID form berbeda.
+   */
+  async getDetailFieldValue(cssClass: string): Promise<string> {
+    return (
+      (await this.page
+        .locator(`input.${cssClass}`)
+        .first()
+        .inputValue({ timeout: 10000 })) ?? ""
+    );
+  }
+
+  /**
+   * Baca teks yang ditampilkan oleh Select2 (bukan value hidden select).
+   * Tidak di-scope ke #form-list karena halaman show mungkin pakai ID form berbeda.
+   */
+  async getSelect2DisplayText(cssClass: string): Promise<string> {
+    const rendered = this.page
+      .locator(`select.${cssClass}`)
+      .locator("..")
+      .locator(".select2-selection__rendered")
+      .first();
+    return ((await rendered.textContent({ timeout: 10000 })) ?? "").trim();
+  }
+
+  // ── V2: Success Notification ──────────────────────────────────────────────
+
+  /**
+   * Coba tangkap pesan sukses (SweetAlert2 / toast / alert).
+   * Non-blocking: mengembalikan "" jika tidak ada notifikasi terdeteksi.
+   */
+  async getSuccessMessage(): Promise<string> {
+    const candidates: Locator[] = [
+      this.page.locator(".swal2-title"),
+      this.page.locator(".alert-success").first(),
+      this.page
+        .locator('[class*="toast"][class*="success"], .Toastify__toast--success')
+        .first(),
+      this.page.locator('[class*="notification"][class*="success"]').first(),
+    ];
+
+    for (const loc of candidates) {
+      const visible = await loc.isVisible({ timeout: 1500 }).catch(() => false);
+      if (visible) return ((await loc.textContent()) ?? "").trim();
+    }
+    return "";
   }
 }

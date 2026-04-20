@@ -8,7 +8,25 @@ import { generateAuction } from "../../../helpers/random";
 const { When } = createBdd();
 
 // ── Shared State ──────────────────────────────────────────────────────────────
+
+export interface CreatedVehicle {
+  licensePlate: string;
+  province:     string;
+  seller:       string;
+  brand:        string;
+  groupType:    string;
+  color?:       string;
+  transmission?: string;
+  fuel?:        string;
+  drive?:       string;
+  manufactYear?: string;
+  mileage?:     string;
+  engineNo?:    string;
+  vin?:         string;
+}
+
 const createdLicensePlates: string[] = [];
+export const createdVehicles: CreatedVehicle[] = [];
 export let createdAuctionName: string = "";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -106,41 +124,162 @@ async function addVehicle(
   const vehiclePage = new VehiclePage(page);
   const licensePlate = preset.licensePlate();
 
+  // Generate nilai random sekali dan simpan agar bisa di-assert di V3/V4
+  const engineNo    = preset.engineNo();
+  const vin         = preset.vin();
+  const manufactYear = preset.manufactYear;
+  const mileage     = preset.mileage;
+  const brand       = preset.brand;
+  const groupType   = preset.groupType;
+  const province    = preset.province;
+  const seller      = preset.seller;
+  const color       = preset.color;
+  const transmission = preset.transmission;
+  const fuel        = preset.fuel;
+  const drive       = preset.drive;
+
   await step(`Navigate to vehicle list`, async () => {
     const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
     await page.goto(`${baseUrl}/en/vehicle/car`);
     await page.locator('a[href*="/vehicle/car/create"]').waitFor({ state: "visible", timeout: 15000 });
   });
 
-  await step(`Fill vehicle form - ${preset.brand} ${preset.groupType} (${licensePlate})`, async () => {
+  await step(`Fill vehicle form - ${brand} ${groupType} (${licensePlate})`, async () => {
     await vehiclePage.clickRegisterNew();
     await vehiclePage.fillCreateForm({
       licensePlate,
       province:     preset.province,
       seller:       preset.seller,
-      brand:        preset.brand,
-      groupType:    preset.groupType,
+      brand,
+      groupType,
       color:        preset.color,
       transmission: preset.transmission,
       fuel:         preset.fuel,
       drive:        preset.drive,
-      manufactYear: preset.manufactYear,
-      mileage:      preset.mileage,
-      engineNo:     preset.engineNo(),
-      vin:          preset.vin(),
+      manufactYear,
+      mileage,
+      engineNo,
+      vin,
     });
   });
 
-  await step(`Save vehicle and verify`, async () => {
+  // ── Save + V2: Success Notification ────────────────────────────────────────
+  await step(`Save vehicle`, async () => {
     await vehiclePage.save();
-    await expect(page).toHaveURL(/\/en\/vehicle\/car/, { timeout: 20000 });
+
+    // V2: Tangkap notifikasi sukses yang muncul sesaat setelah save
+    const successMsg = await vehiclePage.getSuccessMessage();
+    const ss = await page.screenshot();
+    const msgLabel = successMsg
+      ? `V2 ✅ Success - "${successMsg}"`
+      : `V2 ℹ️ No explicit toast detected`;
+    await attachment(`${lotLabel} - ${msgLabel}`, ss, { contentType: "image/png" });
+    await testInfo.attach(`${lotLabel} - ${msgLabel}`, { body: ss, contentType: "image/png" });
+    console.log(`[Vehicle] ${msgLabel}`);
+  });
+
+  // Tunggu redirect ke halaman list
+  await expect(page).toHaveURL(/\/en\/vehicle\/car/, { timeout: 20000 });
+
+  // ── V1: License Plate muncul di list ───────────────────────────────────────
+  await step(`V1 - Verify license plate "${licensePlate}" in vehicle list`, async () => {
+    // Navigate fresh ke list agar Livewire component selalu dalam state bersih
+    const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
+    await page.goto(`${baseUrl}/en/vehicle/car`);
+    await vehiclePage.searchVehicle(licensePlate);
+    const row = vehiclePage.getRow(licensePlate);
+    await expect(row).toBeVisible({ timeout: 10000 });
 
     const ss = await page.screenshot();
-    await attachment(`${lotLabel} - ${preset.brand} ${preset.groupType} Saved`, ss, { contentType: "image/png" });
-    await testInfo.attach(`${lotLabel} - Vehicle Saved (${licensePlate})`, { body: ss, contentType: "image/png" });
+    await attachment(`${lotLabel} - V1 ✅ License Plate In List`, ss, { contentType: "image/png" });
+    await testInfo.attach(`${lotLabel} - V1 Vehicle In List (${licensePlate})`, { body: ss, contentType: "image/png" });
+    console.log(`[Vehicle] V1 ✅ License plate "${licensePlate}" found in list`);
+  });
+
+  // ── V3 & V4: Buka show page dan verifikasi semua field yang disubmit ─────────
+  await step(`V3/V4 - Open show page and verify all submitted fields`, async () => {
+    // Double-click row → tab baru show page (/car/show/{uuid})
+    const showPage = await vehiclePage.clickEditForRow(licensePlate);
+
+    // Tunggu field license plate terisi di show page (ID-based, lebih targeted)
+    await showPage.locator("#car_reg_no").waitFor({ state: "visible", timeout: 15000 });
+    await showPage.waitForFunction(
+      (lp) => (document.querySelector("#car_reg_no") as HTMLInputElement)?.value === lp,
+      licensePlate,
+      { timeout: 15000 }
+    );
+
+    // Helper: baca selected option text dari <select> berdasarkan CSS selector
+    const getSelectText = (selector: string): Promise<string> =>
+      showPage.evaluate((sel) => {
+        const el = document.querySelector(sel) as HTMLSelectElement;
+        const opt = el?.options[el?.selectedIndex];
+        return opt ? opt.text.trim() : "";
+      }, selector);
+
+    // ── V3: Input fields (ID selector + inputValue) ───────────────────────────
+    const licensePlateVal = await showPage.locator("#car_reg_no").inputValue();
+    const manufactYearVal = await showPage.locator("#car_man_year").inputValue();
+    // input-currency JS bisa format "18000" → "18,000" — normalisasi koma
+    const mileageVal      = (await showPage.locator("#car_mileage").inputValue()).replace(/,/g, "");
+    const engineNoVal     = await showPage.locator("#car_enging_no").inputValue();
+    const vinVal          = await showPage.locator("#car_vin").inputValue();
+
+    expect(licensePlateVal, `V3 License Plate "${licensePlate}" mismatch`).toBe(licensePlate);
+    expect(manufactYearVal, `V3 Manufacturing Year "${manufactYear}" mismatch`).toBe(manufactYear);
+    expect(mileageVal,      `V3 Mileage "${mileage}" mismatch`).toBe(mileage);
+    console.log(`[Vehicle] V3 ✅ License Plate, Manufacturing Year, Mileage verified`);
+
+    // ── V3: Select fields (ID/name selector + selectedIndex.text) ────────────
+    const provinceText     = await getSelectText("#province_code");
+    const sellerText       = await getSelectText("#membership_id_ori");
+    const brandText        = await getSelectText("#brand_id");
+    const modelText        = await getSelectText("#group_type_id");
+    const colorText        = await getSelectText("#color_id");
+    const transmissionText = await getSelectText("#car_transmission");
+    const fuelText         = await getSelectText("#fuel_id");
+    // drive_description tidak punya id — pakai attribute name selector
+    const driveText        = await getSelectText('[name="drive_description"]');
+
+    expect(provinceText, `V3 Province "${province}" mismatch`).toContain(province);
+    expect(sellerText,   `V3 Seller "${seller}" mismatch`).toContain(seller);
+    expect(brandText,    `V3 Brand "${brand}" mismatch`).toContain(brand);
+    expect(modelText,    `V3 Model "${groupType}" mismatch`).toContain(groupType);
+    if (color)        expect(colorText,        `V3 Color "${color}" mismatch`).toContain(color);
+    if (transmission) expect(transmissionText, `V3 Transmission "${transmission}" mismatch`).toContain(transmission);
+    if (fuel)         expect(fuelText,         `V3 Fuel "${fuel}" mismatch`).toContain(fuel);
+    if (drive)        expect(driveText,        `V3 Drive "${drive}" mismatch`).toContain(drive);
+    console.log(`[Vehicle] V3 ✅ Province, Seller, Brand, Model, Color, Transmission, Fuel, Drive verified`);
+
+    // ── V4: Engine No & VIN ───────────────────────────────────────────────────
+    expect(engineNoVal, `V4 Engine No "${engineNo}" mismatch`).toContain(engineNo);
+    expect(vinVal,      `V4 VIN "${vin}" mismatch`).toContain(vin);
+    console.log(`[Vehicle] V4 ✅ Engine No "${engineNo}" & VIN "${vin}" verified`);
+
+    const ss = await showPage.screenshot();
+    await attachment(`${lotLabel} - V3/V4 ✅ Show Page Verified`, ss, { contentType: "image/png" });
+    await testInfo.attach(`${lotLabel} - V3/V4 Show Page`, { body: ss, contentType: "image/png" });
+
+    await showPage.close();
+    await page.bringToFront();
   });
 
   createdLicensePlates.push(licensePlate);
+  createdVehicles.push({
+    licensePlate,
+    province,
+    seller,
+    brand,
+    groupType,
+    color,
+    transmission,
+    fuel,
+    drive,
+    manufactYear,
+    mileage,
+    engineNo,
+    vin,
+  });
 }
 
 // ── 1. Vehicle Steps ──────────────────────────────────────────────────────────
