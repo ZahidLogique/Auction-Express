@@ -29,3 +29,11 @@ Feature: Auction Live Flow
     And conductor enables bidding
     When conductor starts countdown
     Then conductor clicks unsold
+
+    # ── Step 7: Lot 3 (Bid Below Reserved Price) ─────────────────────────────
+    When conductor moves to next lot
+    And conductor enables bidding with high reserved price
+    And buyer places a bid
+    Then bid price should be updated on both sides
+    When conductor starts countdown
+    Then conductor clicks unsold
