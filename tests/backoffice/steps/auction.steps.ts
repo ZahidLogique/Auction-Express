@@ -1,6 +1,6 @@
 import { createBdd } from "playwright-bdd";
 import { expect, test } from "@playwright/test";
-import { AuctionPage } from "../../../pages/AuctionPage";
+import { AuctionPage } from "../../../pages/backoffice/AuctionPage";
 import { generateAuction, AuctionData } from "../../../helpers/random";
 import { takeScreenshot } from "../../../helpers/screenshot";
 

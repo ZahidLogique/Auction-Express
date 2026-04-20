@@ -1,6 +1,6 @@
 import { createBdd } from "playwright-bdd";
 import { expect } from "@playwright/test";
-import { AuctionLoginPage } from "../../../pages/LoginPage";
+import { AuctionLoginPage } from "../../../pages/fe-auction/FELoginPage";
 
 const { Given, When, Then } = createBdd();
 

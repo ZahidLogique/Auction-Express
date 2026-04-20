@@ -1,6 +1,6 @@
 import { createBdd } from "playwright-bdd";
 import { expect, test } from "@playwright/test";
-import { VehiclePage } from "../../../pages/VehiclePage";
+import { VehiclePage } from "../../../pages/backoffice/VehiclePage";
 import { generateVehicle, VehicleData } from "../../../helpers/random";
 import { takeScreenshot } from "../../../helpers/screenshot";
 

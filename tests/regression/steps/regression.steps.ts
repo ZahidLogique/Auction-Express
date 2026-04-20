@@ -1,16 +1,15 @@
 import { createBdd } from "playwright-bdd";
 import { expect, test } from "@playwright/test";
-import { VehiclePage } from "../../../pages/VehiclePage";
-import { AuctionPage } from "../../../pages/AuctionPage";
+import { step, attachment } from "allure-js-commons";
+import { VehiclePage } from "../../../pages/backoffice/VehiclePage";
+import { AuctionPage } from "../../../pages/backoffice/AuctionPage";
 import { generateAuction } from "../../../helpers/random";
 
 const { When } = createBdd();
 
 // ── Shared State ──────────────────────────────────────────────────────────────
-// Diisi saat vehicle dibuat, dipakai saat assign ke auction
-
 const createdLicensePlates: string[] = [];
-let createdAuctionName: string        = "";
+export let createdAuctionName: string = "";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -20,7 +19,6 @@ function randDigits(length: number): string {
 
 const REGRESSION_VEHICLES = [
   {
-    // Lot 1 — Honda Brio: city car, AT, putih
     licensePlate:  () => `VH1${randDigits(4)}`,
     province:      "Bangkok",
     seller:        "Zahid",
@@ -36,7 +34,6 @@ const REGRESSION_VEHICLES = [
     vin:           () => `VIN1${randDigits(9)}`,
   },
   {
-    // Lot 2 — Toyota Yaris: hatchback, AT, hitam
     licensePlate:  () => `VH2${randDigits(4)}`,
     province:      "Bangkok",
     seller:        "Zahid",
@@ -52,7 +49,6 @@ const REGRESSION_VEHICLES = [
     vin:           () => `VIN2${randDigits(9)}`,
   },
   {
-    // Lot 3 — Toyota Hilux Revo: pickup, MT, silver, diesel 4WD
     licensePlate:  () => `VH3${randDigits(4)}`,
     province:      "Bangkok",
     seller:        "Zahid",
@@ -68,7 +64,6 @@ const REGRESSION_VEHICLES = [
     vin:           () => `VIN3${randDigits(9)}`,
   },
   {
-    // Lot 4 — BMW 120i: sedan premium, AT, biru, RWD
     licensePlate:  () => `VH4${randDigits(4)}`,
     province:      "Bangkok",
     seller:        "Zahid",
@@ -84,7 +79,6 @@ const REGRESSION_VEHICLES = [
     vin:           () => `VIN4${randDigits(9)}`,
   },
   {
-    // Lot 5 — Citroen C3: hatchback Eropa, AT, merah
     licensePlate:  () => `VH5${randDigits(4)}`,
     province:      "Bangkok",
     seller:        "Zahid",
@@ -103,163 +97,193 @@ const REGRESSION_VEHICLES = [
 
 // ── Helper: add single vehicle ────────────────────────────────────────────────
 
-async function addVehicle(page: any, preset: (typeof REGRESSION_VEHICLES)[number]) {
+async function addVehicle(
+  page: any,
+  testInfo: any,
+  preset: (typeof REGRESSION_VEHICLES)[number],
+  lotLabel: string
+) {
   const vehiclePage = new VehiclePage(page);
   const licensePlate = preset.licensePlate();
 
-  const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
-  await page.goto(`${baseUrl}/en/vehicle/car`);
-  await page.locator('a[href*="/vehicle/car/create"]').waitFor({ state: "visible", timeout: 15000 });
-  await vehiclePage.clickRegisterNew();
-
-  await vehiclePage.fillCreateForm({
-    licensePlate,
-    province:     preset.province,
-    seller:       preset.seller,
-    brand:        preset.brand,
-    groupType:    preset.groupType,
-    color:        preset.color,
-    transmission: preset.transmission,
-    fuel:         preset.fuel,
-    drive:        preset.drive,
-    manufactYear: preset.manufactYear,
-    mileage:      preset.mileage,
-    engineNo:     preset.engineNo(),
-    vin:          preset.vin(),
+  await step(`Navigate to vehicle list`, async () => {
+    const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
+    await page.goto(`${baseUrl}/en/vehicle/car`);
+    await page.locator('a[href*="/vehicle/car/create"]').waitFor({ state: "visible", timeout: 15000 });
   });
 
-  await vehiclePage.save();
-  await expect(page).toHaveURL(/\/en\/vehicle\/car/, { timeout: 20000 });
+  await step(`Fill vehicle form - ${preset.brand} ${preset.groupType} (${licensePlate})`, async () => {
+    await vehiclePage.clickRegisterNew();
+    await vehiclePage.fillCreateForm({
+      licensePlate,
+      province:     preset.province,
+      seller:       preset.seller,
+      brand:        preset.brand,
+      groupType:    preset.groupType,
+      color:        preset.color,
+      transmission: preset.transmission,
+      fuel:         preset.fuel,
+      drive:        preset.drive,
+      manufactYear: preset.manufactYear,
+      mileage:      preset.mileage,
+      engineNo:     preset.engineNo(),
+      vin:          preset.vin(),
+    });
+  });
 
-  // Simpan license plate untuk dipakai di step assign vehicle ke auction
+  await step(`Save vehicle and verify`, async () => {
+    await vehiclePage.save();
+    await expect(page).toHaveURL(/\/en\/vehicle\/car/, { timeout: 20000 });
+
+    const ss = await page.screenshot();
+    await attachment(`${lotLabel} - ${preset.brand} ${preset.groupType} Saved`, ss, { contentType: "image/png" });
+    await testInfo.attach(`${lotLabel} - Vehicle Saved (${licensePlate})`, { body: ss, contentType: "image/png" });
+  });
+
   createdLicensePlates.push(licensePlate);
 }
 
-// ── 1. Vehicle Steps (Backend) ────────────────────────────────────────────────
+// ── 1. Vehicle Steps ──────────────────────────────────────────────────────────
 
-When("I add new vehicle 1 for testing", async ({ page }) => {
-  test.setTimeout(600000); // 10 menit — cover 5 vehicle + auction creation + assign
-  createdLicensePlates.length = 0; // reset tiap test run
-  await addVehicle(page, REGRESSION_VEHICLES[0]);
+When("I add new vehicle 1 for testing", async ({ page, $testInfo }) => {
+  test.setTimeout(600000);
+  createdLicensePlates.length = 0;
+  await addVehicle(page, $testInfo, REGRESSION_VEHICLES[0], "03 - Lot 1");
 });
 
-When("I add new vehicle 2 for testing", async ({ page }) => {
-  await addVehicle(page, REGRESSION_VEHICLES[1]);
+When("I add new vehicle 2 for testing", async ({ page, $testInfo }) => {
+  await addVehicle(page, $testInfo, REGRESSION_VEHICLES[1], "04 - Lot 2");
 });
 
-When("I add new vehicle 3 for testing", async ({ page }) => {
-  await addVehicle(page, REGRESSION_VEHICLES[2]);
+When("I add new vehicle 3 for testing", async ({ page, $testInfo }) => {
+  await addVehicle(page, $testInfo, REGRESSION_VEHICLES[2], "05 - Lot 3");
 });
 
-When("I add new vehicle 4 for testing", async ({ page }) => {
-  await addVehicle(page, REGRESSION_VEHICLES[3]);
+When("I add new vehicle 4 for testing", async ({ page, $testInfo }) => {
+  await addVehicle(page, $testInfo, REGRESSION_VEHICLES[3], "06 - Lot 4");
 });
 
-When("I add new vehicle 5 for testing", async ({ page }) => {
-  await addVehicle(page, REGRESSION_VEHICLES[4]);
+When("I add new vehicle 5 for testing", async ({ page, $testInfo }) => {
+  await addVehicle(page, $testInfo, REGRESSION_VEHICLES[4], "07 - Lot 5");
 });
 
-// ── 2. Auction Session (Backend) ─────────────────────────────────────────────
+// ── 2. Auction Session ────────────────────────────────────────────────────────
 
-When("I create a new auction session", async ({ page }) => {
+When("I create a new auction session", async ({ page, $testInfo }) => {
   const auctionPage = new AuctionPage(page);
   const auctionData = generateAuction();
   createdAuctionName = auctionData.auctionName;
 
-  const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
-  await page.goto(`${baseUrl}/en/auction-management/auction`);
-  await page.locator('a.btn-success:has-text("Create Auction Calendar")').waitFor({ state: "visible", timeout: 15000 });
+  await step("Navigate to auction list", async () => {
+    const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
+    await page.goto(`${baseUrl}/en/auction-management/auction`);
+    await page.locator('a.btn-success:has-text("Create Auction Calendar")').waitFor({ state: "visible", timeout: 15000 });
 
-  await auctionPage.clickCreateAuctionCalendar();
-  await auctionPage.fillCreateForm({
-    date:        auctionData.date,
-    location:    auctionData.location,
-    auctionName: auctionData.auctionName,
-    lotNumber:   auctionData.lotNumber,
-    lane:        auctionData.lane,
-    auctionType: auctionData.auctionType,
-    method:      auctionData.method,
-    startTimer:  auctionData.startTimer,
-    resetTimer:  auctionData.resetTimer,
-    startTime:   auctionData.startTime,
-    eventType:   auctionData.eventType,
+    const ss = await page.screenshot();
+    await attachment("Auction List Before Create", ss, { contentType: "image/png" });
+    await $testInfo.attach("08 - Auction List Before Create", { body: ss, contentType: "image/png" });
   });
 
-  await auctionPage.save();
-  await expect(page).toHaveURL(/\/en\/auction-management\/auction/, { timeout: 20000 });
-  await page.waitForLoadState("domcontentloaded");
+  await step(`Fill auction form - ${auctionData.auctionName}`, async () => {
+    await auctionPage.clickCreateAuctionCalendar();
+    await auctionPage.fillCreateForm({
+      date:        auctionData.date,
+      location:    auctionData.location,
+      auctionName: auctionData.auctionName,
+      lotNumber:   auctionData.lotNumber,
+      lane:        auctionData.lane,
+      auctionType: auctionData.auctionType,
+      method:      auctionData.method,
+      startTimer:  auctionData.startTimer,
+      resetTimer:  auctionData.resetTimer,
+      startTime:   auctionData.startTime,
+      eventType:   auctionData.eventType,
+    });
+  });
+
+  await step("Save auction and verify", async () => {
+    await auctionPage.save();
+    await expect(page).toHaveURL(/\/en\/auction-management\/auction/, { timeout: 20000 });
+    await page.waitForLoadState("domcontentloaded");
+
+    const ss = await page.screenshot();
+    await attachment(`Auction Created - ${createdAuctionName}`, ss, { contentType: "image/png" });
+    await $testInfo.attach(`09 - Auction Created (${createdAuctionName})`, { body: ss, contentType: "image/png" });
+  });
 });
 
-// ── 3. Assign Vehicles to Auction ─────────────────────────────────────────────
+// ── 3. Assign Vehicles ────────────────────────────────────────────────────────
 
-When("I assign the new vehicle to the auction session", async ({ page }) => {
+When("I assign the new vehicle to the auction session", async ({ page, $testInfo }) => {
   const auctionPage = new AuctionPage(page);
 
-  // Navigasi ke detail auction yang baru dibuat
-  await auctionPage.clickDetailByName(createdAuctionName);
+  await step(`Open auction detail - ${createdAuctionName}`, async () => {
+    // Navigasi fresh ke list + search dulu agar Livewire tidak stale
+    const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
+    await page.goto(`${baseUrl}/en/auction-management/auction`);
+    await page.waitForLoadState("domcontentloaded");
+    await page.locator("#jadwallelang tbody").waitFor({ state: "visible", timeout: 15000 });
+    await auctionPage.searchAuction(createdAuctionName);
 
-  // Tambahkan 5 vehicle satu per satu (search by license plate → select → confirm)
+    await auctionPage.clickDetailByName(createdAuctionName);
+
+    const ss = await page.screenshot();
+    await attachment("Auction Detail Before Assign", ss, { contentType: "image/png" });
+    await $testInfo.attach("10 - Auction Detail Before Assign", { body: ss, contentType: "image/png" });
+  });
+
   for (const lp of createdLicensePlates) {
-    await auctionPage.clickAddCar();
-    await auctionPage.searchVehicleInModal(lp);
+    await step(`Assign vehicle ${lp} to auction`, async () => {
+      await auctionPage.clickAddCar();
+      await auctionPage.searchVehicleInModal(lp);
 
-    const hasVehicle = await auctionPage.page
-      .locator('#tbl-vehicle-add input[name="inventory_car_id"]')
-      .first()
-      .isVisible({ timeout: 5000 })
-      .catch(() => false);
+      const hasVehicle = await auctionPage.page
+        .locator('#tbl-vehicle-add input[name="inventory_car_id"]')
+        .first()
+        .isVisible({ timeout: 5000 })
+        .catch(() => false);
 
-    if (!hasVehicle) {
-      // Vehicle tidak ditemukan di modal — close modal dan lanjut
-      await auctionPage.page.keyboard.press("Escape");
-      continue;
-    }
+      if (!hasVehicle) {
+        await auctionPage.page.keyboard.press("Escape");
+        return;
+      }
 
-    await auctionPage.selectFirstVehicleInModal();
-    const result = await auctionPage.confirmAddVehicle();
-
-    if (result === "already_existed") {
-      console.log(`⚠️  Vehicle ${lp} already in an auction — skipped`);
-    }
+      await auctionPage.selectFirstVehicleInModal();
+      const result = await auctionPage.confirmAddVehicle();
+      if (result === "already_existed") {
+        console.log(`⚠️  Vehicle ${lp} already in an auction — skipped`);
+      }
+    });
   }
+
+  await step("Verify all vehicles assigned", async () => {
+    const ss = await page.screenshot();
+    await attachment("After Assign All Vehicles", ss, { contentType: "image/png" });
+    await $testInfo.attach("11 - Auction Detail After Assign All Vehicles", { body: ss, contentType: "image/png" });
+  });
 });
 
-// ── 4. Publish — TODO ─────────────────────────────────────────────────────────
+// ── 4. Publish ────────────────────────────────────────────────────────────────
 
-// When("I publish the auction session", async ({ page }) => {
-//   // TODO: Implement — publish sesi lelang
-// });
+When("I publish the auction session", async ({ page, $testInfo }) => {
+  const auctionPage = new AuctionPage(page);
 
-// ── 4. Customer (FE Auction) — TODO ───────────────────────────────────────────
+  await step("Navigate to auction list for publish", async () => {
+    const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
+    await page.goto(`${baseUrl}/en/auction-management/auction`);
+    await page.waitForLoadState("domcontentloaded");
+    await page.locator("#jadwallelang tbody").waitFor({ state: "visible", timeout: 15000 });
 
-// When("I login with valid customer credentials", async ({ page }) => {
-//   // TODO: Implement
-//   // Gunakan: process.env.CUSTOMER_USER, process.env.CUSTOMER_PASS
-// });
+    const ss = await page.screenshot();
+    await attachment("Auction List Before Publish", ss, { contentType: "image/png" });
+    await $testInfo.attach("12 - Auction List Before Publish", { body: ss, contentType: "image/png" });
+  });
 
-// Then("I should be ready to bid in the auction", async ({ page }) => {
-//   // TODO: Implement
-// });
+  await step(`Publish auction - ${createdAuctionName}`, async () => {
+    await auctionPage.publishAuction(createdAuctionName);
 
-// ── 4. Conductor (FE Conductor) — TODO ────────────────────────────────────────
-
-// When("I login with valid conductor credentials", async ({ page }) => {
-//   // TODO: Implement
-//   // Gunakan: process.env.CONDUCTOR_USER, process.env.CONDUCTOR_PASS
-// });
-
-// Then("I should be ready to manage the auction", async ({ page }) => {
-//   // TODO: Implement
-// });
-
-// ── 5. Auction Flow — TODO ────────────────────────────────────────────────────
-
-// When("the conductor starts the auction for lot {int}", async ({ page }, _lot: number) => {});
-// When("the customer places a bid on lot {int}", async ({ page }, _lot: number) => {});
-// When("the conductor accepts the bid and moves to the next lot", async ({ page }) => {});
-// When("the conductor ends the auction session", async ({ page }) => {});
-
-// ── 6. Post-Auction Verification — TODO ──────────────────────────────────────
-
-// Then("the auction status should be completed", async ({ page }) => {});
-// Then("the transaction should be recorded in Backoffice", async ({ page }) => {});
+    const ss = await page.screenshot();
+    await attachment("Auction Published", ss, { contentType: "image/png" });
+    await $testInfo.attach("13 - Auction Published", { body: ss, contentType: "image/png" });
+  });
+});

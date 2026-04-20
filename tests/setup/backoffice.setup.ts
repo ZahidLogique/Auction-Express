@@ -1,5 +1,5 @@
 import { test as setup, expect } from "@playwright/test";
-import { BackofficeLoginPage } from "../../pages/LoginPage";
+import { BackofficeLoginPage } from "../../pages/backoffice/LoginPage";
 import path from "path";
 
 const authFile = path.join(__dirname, "../../.auth/backoffice.json");

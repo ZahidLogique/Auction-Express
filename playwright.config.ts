@@ -121,6 +121,7 @@ export default defineConfig({
     {
       name: "regression",
       testDir: regressionTestDir,
+      fullyParallel: false, // E2E harus selesai dulu sebelum auction flow
       use: {
         ...devices["Desktop Chrome"],
       },
