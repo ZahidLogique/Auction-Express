@@ -568,6 +568,35 @@ Then("buyer closes winner notification", async ({ $testInfo }) => {
   });
 });
 
+Then("conductor clicks unsold", async ({ $testInfo }) => {
+  await step("Conductor - Click Unsold button", async () => {
+    const unsoldBtn = conductorPage.getByRole("button", { name: "Unsold", exact: true });
+    await unsoldBtn.waitFor({ state: "visible", timeout: 15000 });
+    // Unsold enabled setelah countdown selesai (sama seperti Sold)
+    await expect(unsoldBtn).toBeEnabled({ timeout: 60000 });
+    await unsoldBtn.click();
+    await conductorPage.waitForTimeout(1000);
+    console.log("[Conductor] Clicked Unsold");
+    await attachScreenshot($testInfo, conductorPage, "08 - Conductor After Unsold");
+    await attachScreenshot($testInfo, buyerPage,    "08 - Buyer After Unsold");
+  });
+
+  await step("Verify no winner notification on buyer side", async () => {
+    // Setelah Unsold: buyer TIDAK boleh menerima notifikasi "You are the winner"
+    const winnerModal = buyerPage.locator("text=You are the winner");
+    const hasWinner = await winnerModal.isVisible({ timeout: 5000 }).catch(() => false);
+
+    expect(
+      hasWinner,
+      "[Unsold] Modal 'You are the winner' muncul di buyer padahal lot di-Unsold"
+    ).toBe(false);
+
+    console.log("[Buyer] ✅ No winner notification confirmed (Unsold scenario)");
+    await attachScreenshot($testInfo, conductorPage, "08b - Conductor Unsold Confirmed");
+    await attachScreenshot($testInfo, buyerPage,    "08b - Buyer Unsold - No Winner Modal");
+  });
+});
+
 When("conductor moves to next lot", async ({ $testInfo }) => {
   await step("Conductor - Wait for next lot to load (auto-advance after Continue)", async () => {
     const prevPlate = createdVehicles[currentLotIndex]?.licensePlate ?? "";
