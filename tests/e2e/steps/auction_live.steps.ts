@@ -278,10 +278,10 @@ When("buyer joins the auction", async ({ $testInfo }) => {
 
 // ── Step 3: Enable Bidding ────────────────────────────────────────────────
 
-When("conductor enables bidding", async ({ $testInfo }) => {
+// ── Helper: enable bidding dengan reserved price yang bisa dikonfigurasi ──────
+async function doEnableBidding(reservedPrice: number, testInfo: TestInfo) {
   await step("Conductor - Click Start Lane (if not already done)", async () => {
     const startLaneBtn = conductorPage.locator('button:has-text("Start Lane")');
-    // Gunakan isVisible dengan timeout singkat — jika tidak ada, skip saja
     const isVisible = await startLaneBtn.isVisible({ timeout: 8000 }).catch(() => false);
     if (isVisible) {
       const isEnabled = await startLaneBtn.isEnabled().catch(() => false);
@@ -295,8 +295,7 @@ When("conductor enables bidding", async ({ $testInfo }) => {
     } else {
       console.log("[Conductor] Start Lane not visible (already started), skipping...");
     }
-
-    await attachScreenshot($testInfo, conductorPage, "04 - Conductor After Start Lane");
+    await attachScreenshot(testInfo, conductorPage, "04 - Conductor After Start Lane");
   });
 
   await step("Conductor - Set Starting Price", async () => {
@@ -304,10 +303,8 @@ When("conductor enables bidding", async ({ $testInfo }) => {
     await adjustStartBtn.waitFor({ state: "visible", timeout: 10000 });
     await adjustStartBtn.scrollIntoViewIfNeeded();
     await conductorPage.waitForTimeout(500);
+    await attachScreenshot(testInfo, conductorPage, "04b - Conductor Starting Price Area");
 
-    await attachScreenshot($testInfo, conductorPage, "04b - Conductor Starting Price Area");
-
-    // #6: Cari input via parent container button — tidak pakai index agar tidak fragile
     const startingPriceInput = conductorPage
       .locator('button:has-text("Adjust Starting Price")')
       .locator("..")
@@ -327,17 +324,15 @@ When("conductor enables bidding", async ({ $testInfo }) => {
     await adjustStartBtn.click({ force: true });
     await conductorPage.waitForTimeout(1000);
 
-    // Reset bid price tracker untuk lot ini
     currentBidPrice = STARTING_PRICE;
     console.log(`[Conductor] Starting price set to ${STARTING_PRICE.toLocaleString("en-US")}`);
-    await attachScreenshot($testInfo, conductorPage, "04c - Conductor After Set Starting Price");
+    await attachScreenshot(testInfo, conductorPage, "04c - Conductor After Set Starting Price");
   });
 
-  await step("Conductor - Set Reserved Price", async () => {
+  await step(`Conductor - Set Reserved Price (${reservedPrice.toLocaleString("en-US")})`, async () => {
     const adjustReservedBtn = conductorPage.locator('button:has-text("Adjust Reserved Price")');
     await adjustReservedBtn.waitFor({ state: "visible", timeout: 10000 });
 
-    // #6: Cari input via parent container button — tidak pakai index agar tidak fragile
     const reservedPriceInput = conductorPage
       .locator('button:has-text("Adjust Reserved Price")')
       .locator("..")
@@ -351,14 +346,14 @@ When("conductor enables bidding", async ({ $testInfo }) => {
       setter?.call(el, value);
       el.dispatchEvent(new Event("input",  { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
-    }, "90000");
+    }, String(reservedPrice));
     await conductorPage.waitForTimeout(500);
 
     await adjustReservedBtn.click({ force: true });
     await conductorPage.waitForTimeout(1000);
 
-    console.log("[Conductor] Reserved price set to 90,000");
-    await attachScreenshot($testInfo, conductorPage, "04d - Conductor After Set Reserved Price");
+    console.log(`[Conductor] Reserved price set to ${reservedPrice.toLocaleString("en-US")}`);
+    await attachScreenshot(testInfo, conductorPage, "04d - Conductor After Set Reserved Price");
   });
 
   await step("Conductor - Click Enable Bid Button", async () => {
@@ -371,10 +366,22 @@ When("conductor enables bidding", async ({ $testInfo }) => {
 
   await step("Verify bidding enabled on both sides", async () => {
     await Promise.all([
-      attachScreenshot($testInfo, conductorPage, "04 - Conductor After Enable Bid"),
-      attachScreenshot($testInfo, buyerPage, "04 - Buyer View After Bid Enabled"),
+      attachScreenshot(testInfo, conductorPage, "04 - Conductor After Enable Bid"),
+      attachScreenshot(testInfo, buyerPage,     "04 - Buyer View After Bid Enabled"),
     ]);
   });
+}
+
+// Reserved price normal (di bawah expected bid) — Lot 1
+When("conductor enables bidding", async ({ $testInfo }) => {
+  await doEnableBidding(90_000, $testInfo);
+});
+
+// Reserved price tinggi (di atas expected bid 105,000) — Lot 3 scenario
+When("conductor enables bidding with high reserved price", async ({ $testInfo }) => {
+  const HIGH_RESERVED = 200_000;
+  console.log(`[Conductor] Lot 3 scenario: reserved price ${HIGH_RESERVED.toLocaleString("en-US")} > expected bid ${(STARTING_PRICE + BID_INCREMENT).toLocaleString("en-US")}`);
+  await doEnableBidding(HIGH_RESERVED, $testInfo);
 });
 
 // ── Step 4: Buyer Bid ─────────────────────────────────────────────────────
