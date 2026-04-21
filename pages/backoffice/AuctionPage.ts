@@ -21,7 +21,7 @@ export class AuctionPage {
     this.page = page;
 
     // List page
-    this.createButton = page.locator('a.btn-success:has-text("Create Auction Calendar")');
+    this.createButton = page.locator('a.btn-success[href*="create"]');
 
     // Create form
     this.auctionDateInput    = page.locator("#auctionDate");

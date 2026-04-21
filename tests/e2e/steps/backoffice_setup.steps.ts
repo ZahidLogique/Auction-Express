@@ -316,7 +316,7 @@ When("I create a new auction session", async ({ page, $testInfo }) => {
   await step("Navigate to auction list", async () => {
     const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
     await page.goto(`${baseUrl}/en/auction-management/auction`);
-    await page.locator('a.btn-success:has-text("Create Auction Calendar")').waitFor({ state: "visible", timeout: 15000 });
+    await page.locator('a.btn-success[href*="create"]').waitFor({ state: "visible", timeout: 15000 });
 
     const ss = await page.screenshot();
     await attachment("Auction List Before Create", ss, { contentType: "image/png" });

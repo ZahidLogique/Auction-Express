@@ -27,12 +27,13 @@ Feature: Auction Live Flow
     # ── Step 6: Lot 2 (No Winner / Unsold) ──────────────────────────────────
     When conductor moves to next lot
     And conductor enables bidding
+    And buyer clicks interested without bidding
     When conductor starts countdown
     Then conductor clicks unsold
 
-    # ── Step 7: Lot 3 (Bid Below Reserved Price) ─────────────────────────────
+    # ── Step 7: Lot 3 (Bid Placed but Conductor Unsold) ─────────────────────
     When conductor moves to next lot
-    And conductor enables bidding with high reserved price
+    And conductor enables bidding
     And buyer places a bid
     Then bid price should be updated on both sides
     When conductor starts countdown

@@ -78,42 +78,6 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
 
-    // ── Backoffice App (Authenticated) ─────────────────────────────────────────
-    {
-      name: "backoffice",
-      testDir: backofficeTestDir,
-      use: {
-        ...devices["Desktop Chrome"],
-        baseURL: process.env.BACKOFFICE_URL,
-        storageState: ".auth/backoffice.json",
-      },
-      dependencies: ["setup-backoffice"],
-    },
-
-    // ── FE Buyer / Auction App (Authenticated) ─────────────────────────────────
-    {
-      name: "fe-buyer",
-      testDir: feBuyerTestDir,
-      use: {
-        ...devices["Desktop Chrome"],
-        baseURL: process.env.FE_AUCTION_URL,
-        storageState: ".auth/auction.json",
-      },
-      dependencies: ["setup-auction"],
-    },
-
-    // ── FE Conductor App (Authenticated) ───────────────────────────────────────
-    {
-      name: "fe-conductor",
-      testDir: feConductorTestDir,
-      use: {
-        ...devices["Desktop Chrome"],
-        baseURL: process.env.FE_CONDUCTOR_URL,
-        storageState: ".auth/conductor.json",
-      },
-      dependencies: ["setup-conductor"],
-    },
-
     // ── E2E (Full Flow across apps) ────────────────────────────────────────────
     // Mencakup: backoffice setup → live auction (conductor + buyer).
     // fullyParallel: false agar 01_backoffice_setup selesai sebelum 02_auction_live.

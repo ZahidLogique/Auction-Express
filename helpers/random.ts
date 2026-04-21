@@ -124,7 +124,7 @@ export function generateAuction(): AuctionData {
     lane:        "1",
     auctionType: "public",
     method:      "online",
-    startTimer:  "30",
+    startTimer:  "10",
     resetTimer:  "10",
     startTime:   "06:00",
     eventType:   "sequence",

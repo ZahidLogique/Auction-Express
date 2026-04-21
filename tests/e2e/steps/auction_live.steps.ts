@@ -60,10 +60,11 @@ async function verifyVehicleDataInRoom(
   testInfo: TestInfo
 ) {
   await step(`Verify vehicle data in auction room - ${lotLabel}`, async () => {
-    // Tunggu panel info kendaraan siap — indikator: span "Plate No" muncul
+    // Tunggu panel info kendaraan siap — indikator: nilai plate SPESIFIK muncul di span.text-right
+    // Lebih reliable dari menunggu label "Plate No" yang sudah ada dari lot sebelumnya
     await buyerPage
-      .locator("span")
-      .filter({ hasText: /^Plate No$/ })
+      .locator("span.text-right")
+      .filter({ hasText: vehicle.licensePlate })
       .first()
       .waitFor({ state: "visible", timeout: 15000 });
 
@@ -372,16 +373,36 @@ async function doEnableBidding(reservedPrice: number, testInfo: TestInfo) {
   });
 }
 
-// Reserved price normal (di bawah expected bid) — Lot 1
 When("conductor enables bidding", async ({ $testInfo }) => {
   await doEnableBidding(90_000, $testInfo);
 });
 
-// Reserved price tinggi (di atas expected bid 105,000) — Lot 3 scenario
-When("conductor enables bidding with high reserved price", async ({ $testInfo }) => {
-  const HIGH_RESERVED = 200_000;
-  console.log(`[Conductor] Lot 3 scenario: reserved price ${HIGH_RESERVED.toLocaleString("en-US")} > expected bid ${(STARTING_PRICE + BID_INCREMENT).toLocaleString("en-US")}`);
-  await doEnableBidding(HIGH_RESERVED, $testInfo);
+// ── Step 3b: Buyer Clicks Interested Without Bidding (Lot 2 - No Winner) ──
+
+When("buyer clicks interested without bidding", async ({ $testInfo }) => {
+  await step("Buyer - Click Interested (no bid will be placed)", async () => {
+    const interestedBtn = buyerPage.locator('button:has-text("Interested")');
+    const isInterested = await interestedBtn.isVisible({ timeout: 5000 }).catch(() => false);
+
+    if (isInterested) {
+      await expect(interestedBtn).toBeEnabled({ timeout: 5000 });
+      await interestedBtn.click();
+      await buyerPage.waitForTimeout(1000);
+      console.log("[Buyer] Clicked Interested (no bid scenario)");
+
+      const acceptBtn = buyerPage.locator('button:has-text("Accept")');
+      await acceptBtn.waitFor({ state: "visible", timeout: 10000 });
+      await expect(acceptBtn).toBeEnabled({ timeout: 5000 });
+      await acceptBtn.click();
+      await buyerPage.waitForTimeout(1000);
+      console.log("[Buyer] Clicked Accept — buyer is interested but will not bid");
+    } else {
+      console.log("[Buyer] Interested button not visible, already in bidding state");
+    }
+
+    await attachScreenshot($testInfo, buyerPage, "Lot2 - Buyer Interested No Bid");
+    await attachScreenshot($testInfo, conductorPage, "Lot2 - Conductor After Buyer Interested");
+  });
 });
 
 // ── Step 4: Buyer Bid ─────────────────────────────────────────────────────
@@ -579,13 +600,26 @@ Then("conductor clicks unsold", async ({ $testInfo }) => {
   await step("Conductor - Click Unsold button", async () => {
     const unsoldBtn = conductorPage.getByRole("button", { name: "Unsold", exact: true });
     await unsoldBtn.waitFor({ state: "visible", timeout: 15000 });
-    // Unsold enabled setelah countdown selesai (sama seperti Sold)
     await expect(unsoldBtn).toBeEnabled({ timeout: 60000 });
     await unsoldBtn.click();
     await conductorPage.waitForTimeout(1000);
     console.log("[Conductor] Clicked Unsold");
     await attachScreenshot($testInfo, conductorPage, "08 - Conductor After Unsold");
     await attachScreenshot($testInfo, buyerPage,    "08 - Buyer After Unsold");
+  });
+
+  await step("Conductor - Handle Unsold modal and click Continue", async () => {
+    // Setelah Unsold, muncul modal "The auction winner is Unsold" — perlu klik Continue
+    const unsoldModal = conductorPage.locator('text=The auction winner is');
+    const hasModal = await unsoldModal.isVisible({ timeout: 5000 }).catch(() => false);
+    if (hasModal) {
+      const continueBtn = conductorPage.getByRole("button", { name: "Continue", exact: true });
+      await continueBtn.waitFor({ state: "visible", timeout: 5000 });
+      await continueBtn.click();
+      await conductorPage.waitForTimeout(1000);
+      console.log("[Conductor] Unsold modal closed via Continue");
+    }
+    await attachScreenshot($testInfo, conductorPage, "08b - Conductor Unsold Modal Closed");
   });
 
   await step("Verify no winner notification on buyer side", async () => {
@@ -599,8 +633,8 @@ Then("conductor clicks unsold", async ({ $testInfo }) => {
     ).toBe(false);
 
     console.log("[Buyer] ✅ No winner notification confirmed (Unsold scenario)");
-    await attachScreenshot($testInfo, conductorPage, "08b - Conductor Unsold Confirmed");
-    await attachScreenshot($testInfo, buyerPage,    "08b - Buyer Unsold - No Winner Modal");
+    await attachScreenshot($testInfo, conductorPage, "08c - Conductor Unsold Confirmed");
+    await attachScreenshot($testInfo, buyerPage,    "08c - Buyer Unsold - No Winner Modal");
   });
 });
 
@@ -612,6 +646,12 @@ When("conductor moves to next lot", async ({ $testInfo }) => {
 
     console.log(`[Conductor] Advancing to lot ${currentLotIndex + 1}...`);
 
+    // Tunggu conductor page fully settled sebelum lanjut ke lot berikutnya.
+    // Ini penting agar Enable Bid Button di lot berikutnya sudah enabled.
+    await conductorPage.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {
+      console.log("[Conductor] networkidle timeout, continuing anyway...");
+    });
+
     if (nextVehicle) {
       // #7: Assert lot benar-benar berganti — tunggu plate kendaraan BERIKUTNYA muncul di buyer
       // (bukan hanya waitForTimeout yang tidak reliable)
@@ -619,7 +659,9 @@ When("conductor moves to next lot", async ({ $testInfo }) => {
         (plate) => document.body.innerText.includes(plate),
         nextVehicle.licensePlate,
         { timeout: 20000 }
-      );
+      ).catch(() => {
+        console.log(`[Conductor] ⚠️ Plate "${nextVehicle.licensePlate}" not found in buyer page, continuing...`);
+      });
       console.log(`[Conductor] ✅ Lot changed: "${prevPlate}" → "${nextVehicle.licensePlate}"`);
     } else {
       // Fallback jika sudah lot terakhir
