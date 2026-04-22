@@ -38,3 +38,16 @@ Feature: Auction Live Flow
     Then bid price should be updated on both sides
     When conductor starts countdown
     Then conductor clicks unsold
+
+    # ── Step 8: Lot 4 (Multiple Bidders - Buyer 2 Outbids Buyer 1) ──────────
+    When conductor moves to next lot
+    And conductor enables bidding
+    And buyer places a bid
+    Then bid price should be updated on both sides
+    When buyer 2 places a bid
+    Then bid price should be updated on all sides
+    When conductor starts countdown
+    Then buyer 2 should see bid success
+    And conductor clicks sold
+    And buyer 2 closes winner notification
+    And buyer 1 should not see winner notification

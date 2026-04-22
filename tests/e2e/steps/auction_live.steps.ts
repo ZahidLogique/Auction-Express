@@ -10,8 +10,10 @@ const { When, Then } = createBdd();
 
 export let conductorPage: Page;
 export let buyerPage: Page;
+export let buyerPage2: Page;
 let conductorContext: BrowserContext;
 let buyerContext: BrowserContext;
+let buyerContext2: BrowserContext;
 
 // Tracker lot yang sedang berjalan (0-based index ke createdVehicles[])
 let currentLotIndex = 0;
@@ -113,28 +115,41 @@ When("conductor and buyer login in parallel", async ({ browser, $testInfo }) => 
   conductorPage = await conductorContext.newPage();
   buyerPage = await buyerContext.newPage();
 
-  const conductorLogin = new ConductorLoginPage(conductorPage);
-  const buyerLogin = new FELoginPage(buyerPage);
+  buyerContext2 = await browser.newContext();
+  buyerPage2    = await buyerContext2.newPage();
 
-  await step("Parallel login: Conductor and Buyer", async () => {
-    await Promise.all([
-      (async () => {
-        await conductorPage.goto(process.env.FE_CONDUCTOR_URL!);
-        await conductorLogin.login(process.env.CONDUCTOR_USER!, process.env.CONDUCTOR_PASS!);
-        await conductorPage.waitForURL((url) => !url.pathname.includes("login"), { timeout: 15000 });
-      })(),
-      (async () => {
-        await buyerPage.goto(process.env.FE_AUCTION_URL!);
-        await buyerLogin.login(process.env.AUCTION_USER!, process.env.AUCTION_PASS!);
-        await buyerPage.waitForURL((url) => !url.pathname.includes("login"), { timeout: 15000 });
-      })(),
-    ]);
+  const conductorLogin = new ConductorLoginPage(conductorPage);
+  const buyerLogin     = new FELoginPage(buyerPage);
+  const buyerLogin2    = new FELoginPage(buyerPage2);
+
+  await step("Parallel login: Conductor, Buyer 1, and Buyer 2", async () => {
+    // Conductor start di background (parallel)
+    const conductorLoginPromise = (async () => {
+      await conductorPage.goto(process.env.FE_CONDUCTOR_URL!);
+      await conductorLogin.login(process.env.CONDUCTOR_USER!, process.env.CONDUCTOR_PASS!);
+      await conductorPage.waitForURL((url) => !url.pathname.includes("login"), { timeout: 15000 });
+    })();
+
+    // Buyer 1 login dulu, setelah selesai baru Buyer 2 (sequential)
+    await buyerPage.goto(process.env.FE_AUCTION_URL!);
+    await buyerLogin.login(process.env.AUCTION_USER!, process.env.AUCTION_PASS!);
+    await buyerPage.waitForURL((url) => !url.pathname.includes("login"), { timeout: 15000 });
+    console.log("[Buyer] Logged in successfully");
+
+    await buyerPage2.goto(process.env.FE_AUCTION_URL!);
+    await buyerLogin2.login(process.env.AUCTION_USER_2!, process.env.AUCTION_PASS_2!);
+    await buyerPage2.waitForURL((url) => !url.pathname.includes("login"), { timeout: 15000 });
+    console.log("[Buyer2] Logged in successfully");
+
+    // Tunggu conductor selesai
+    await conductorLoginPromise;
   });
 
-  await step("Verify both sessions logged in", async () => {
+  await step("Verify all sessions logged in", async () => {
     await Promise.all([
       attachScreenshot($testInfo, conductorPage, "01 - Conductor After Login"),
-      attachScreenshot($testInfo, buyerPage, "01 - Buyer After Login"),
+      attachScreenshot($testInfo, buyerPage,     "01 - Buyer 1 After Login"),
+      attachScreenshot($testInfo, buyerPage2,    "01 - Buyer 2 After Login"),
     ]);
   });
 });
@@ -275,6 +290,60 @@ When("buyer joins the auction", async ({ $testInfo }) => {
       $testInfo
     );
   }
+
+  // ── Buyer 2 join auction (passive observer until Lot 4) ─────────────────
+  await step("Buyer 2 - Join auction room", async () => {
+    await buyerPage2.waitForLoadState("domcontentloaded");
+    await buyerPage2.waitForTimeout(1000);
+
+    const joinBtn2 = buyerPage2.locator('button:has-text("Join Auction")');
+    await joinBtn2.waitFor({ state: "visible", timeout: 15000 });
+    await expect(joinBtn2).toBeEnabled({ timeout: 10000 });
+    await joinBtn2.click();
+    await buyerPage2.waitForLoadState("domcontentloaded");
+    await buyerPage2.waitForTimeout(1000);
+
+    // Handle Terms and Conditions jika muncul
+    const termsModal2 = buyerPage2.locator('text=Terms And Conditions').first();
+    const isTermsVisible2 = await termsModal2.isVisible({ timeout: 3000 }).catch(() => false);
+    if (isTermsVisible2) {
+      const checkbox2 = buyerPage2.locator('input[type="checkbox"]').last();
+      await checkbox2.scrollIntoViewIfNeeded();
+      await checkbox2.click({ force: true });
+      await buyerPage2.waitForTimeout(500);
+      const acceptBtn2 = buyerPage2.locator('button:has-text("Accept")').last();
+      await expect(acceptBtn2).toBeEnabled({ timeout: 5000 });
+      await acceptBtn2.click();
+      await buyerPage2.waitForTimeout(1500);
+      console.log("[Buyer2] Terms accepted.");
+    }
+
+    // Pilih auction yang sama dengan buyer 1
+    let checkbox2;
+    if (createdAuctionName) {
+      const matchingRow2 = buyerPage2.locator('div.w-full.flex.items-center').filter({ hasText: createdAuctionName }).first();
+      const rowVisible2 = await matchingRow2.isVisible({ timeout: 3000 }).catch(() => false);
+      if (rowVisible2) {
+        checkbox2 = matchingRow2.locator('input[name="selected_lane"]');
+        console.log(`[Buyer2] Found auction: "${createdAuctionName}"`);
+      }
+    }
+    if (!checkbox2) {
+      checkbox2 = buyerPage2.locator('input[name="selected_lane"]').first();
+      console.log("[Buyer2] Using first row as fallback");
+    }
+    await checkbox2.waitFor({ state: "visible", timeout: 10000 });
+    await checkbox2.click({ force: true });
+    await buyerPage2.waitForTimeout(500);
+
+    const joinBtn2b = buyerPage2.locator('button:has-text("Join Auction")');
+    await expect(joinBtn2b).toBeEnabled({ timeout: 60000 });
+    await joinBtn2b.click();
+    await buyerPage2.waitForTimeout(2000);
+
+    console.log("[Buyer2] Joined auction room successfully");
+    await attachScreenshot($testInfo, buyerPage2, "03 - Buyer 2 Inside Auction Room");
+  });
 });
 
 // ── Step 3: Enable Bidding ────────────────────────────────────────────────
@@ -635,6 +704,151 @@ Then("conductor clicks unsold", async ({ $testInfo }) => {
     console.log("[Buyer] ✅ No winner notification confirmed (Unsold scenario)");
     await attachScreenshot($testInfo, conductorPage, "08c - Conductor Unsold Confirmed");
     await attachScreenshot($testInfo, buyerPage,    "08c - Buyer Unsold - No Winner Modal");
+  });
+});
+
+// ── Step 8: Multiple Bidders (Lot 4) ─────────────────────────────────────────
+
+When("buyer 2 places a bid", async ({ $testInfo }) => {
+  await step("Buyer 2 - Click Interested (if not already bidding)", async () => {
+    const interestedBtn = buyerPage2.locator('button:has-text("Interested")');
+    const isInterested = await interestedBtn.isVisible({ timeout: 5000 }).catch(() => false);
+
+    if (isInterested) {
+      await expect(interestedBtn).toBeEnabled({ timeout: 5000 });
+      await interestedBtn.click();
+      await buyerPage2.waitForTimeout(1000);
+      console.log("[Buyer2] Clicked Interested");
+
+      // Setelah Interested, Accept mungkin tidak muncul kalau sudah ada active bid dari buyer lain
+      // Langsung cek dalam waktu singkat, kalau tidak ada skip saja
+      const acceptBtn = buyerPage2.locator('button:has-text("Accept")');
+      const isAcceptVisible = await acceptBtn.isVisible({ timeout: 3000 }).catch(() => false);
+
+      if (isAcceptVisible) {
+        await expect(acceptBtn).toBeEnabled({ timeout: 5000 });
+        await acceptBtn.click();
+        await buyerPage2.waitForTimeout(1000);
+        console.log("[Buyer2] Clicked Accept");
+      } else {
+        console.log("[Buyer2] Accept tidak muncul - langsung ke bid state");
+      }
+    } else {
+      console.log("[Buyer2] Already in bidding state (skipping Interested + Accept)");
+    }
+
+    await attachScreenshot($testInfo, buyerPage2, "Lot4 - Buyer2 Bid State");
+  });
+
+  await step("Buyer 2 - Offer +5000 (outbid Buyer 1)", async () => {
+    const increaseBtn = buyerPage2.locator('button:has-text("5000")').first();
+    await increaseBtn.waitFor({ state: "visible", timeout: 10000 });
+    await expect(increaseBtn).toBeEnabled({ timeout: 5000 });
+    await increaseBtn.click();
+    await buyerPage2.waitForTimeout(1000);
+    currentBidPrice = currentBidPrice + BID_INCREMENT; // outbid buyer 1
+    console.log(`[Buyer2] Offered +${BID_INCREMENT.toLocaleString("en-US")} → expected bid: ${currentBidPrice.toLocaleString("en-US")}`);
+
+    // Handle modal konfirmasi jika muncul
+    const confirmModal = buyerPage2.locator('text=Are you sure want to bid');
+    const hasModal = await confirmModal.isVisible({ timeout: 3000 }).catch(() => false);
+    if (hasModal) {
+      const bidConfirmBtn = buyerPage2.getByRole('button', { name: 'Bid', exact: true });
+      await bidConfirmBtn.waitFor({ state: "visible", timeout: 5000 });
+      await bidConfirmBtn.click();
+      await buyerPage2.waitForTimeout(1000);
+      console.log("[Buyer2] Bid confirmed via modal");
+    }
+
+    await attachScreenshot($testInfo, buyerPage2, "Lot4 - Buyer2 After Offer +5000");
+  });
+});
+
+Then("bid price should be updated on all sides", async ({ $testInfo }) => {
+  await step("Verify bid price updated on conductor, buyer 1, and buyer 2", async () => {
+    await buyerPage.waitForTimeout(1500);
+
+    const expectedFormatted = currentBidPrice.toLocaleString("en-US");
+
+    const buyerHasBid = await buyerPage
+      .locator(`text=${expectedFormatted}`).first()
+      .isVisible({ timeout: 10000 }).catch(() => false);
+
+    const buyer2HasBid = await buyerPage2
+      .locator(`text=${expectedFormatted}`).first()
+      .isVisible({ timeout: 10000 }).catch(() => false);
+
+    const conductorHasBid = await conductorPage
+      .locator(`text=${expectedFormatted}`).first()
+      .isVisible({ timeout: 10000 }).catch(() => false);
+
+    expect(buyerHasBid,     `[Bid Price] "${expectedFormatted}" tidak tampil di buyer 1`).toBe(true);
+    expect(buyer2HasBid,    `[Bid Price] "${expectedFormatted}" tidak tampil di buyer 2`).toBe(true);
+    expect(conductorHasBid, `[Bid Price] "${expectedFormatted}" tidak tampil di conductor`).toBe(true);
+
+    console.log(`[Verify] ✅ Bid price "${expectedFormatted}" confirmed on all 3 sides`);
+    await Promise.all([
+      attachScreenshot($testInfo, conductorPage, "Lot4 - Conductor Bid Price All Sides"),
+      attachScreenshot($testInfo, buyerPage,     "Lot4 - Buyer1 Bid Price All Sides"),
+      attachScreenshot($testInfo, buyerPage2,    "Lot4 - Buyer2 Bid Price All Sides"),
+    ]);
+  });
+});
+
+Then("buyer 2 should see bid success", async ({ $testInfo }) => {
+  await step("Verify buyer 2 is highest bidder after countdown", async () => {
+    const expectedFormatted = currentBidPrice.toLocaleString("en-US");
+
+    const buyer2StillHighest = await buyerPage2
+      .locator(`text=${expectedFormatted}`).first()
+      .isVisible({ timeout: 10000 }).catch(() => false);
+
+    expect(buyer2StillHighest,
+      `[Bid Success] Buyer 2 tidak lagi menampilkan bid "${expectedFormatted}" setelah countdown`
+    ).toBe(true);
+
+    console.log(`[Buyer2] ✅ Still highest bidder at "${expectedFormatted}" after countdown`);
+    await attachScreenshot($testInfo, buyerPage2, "Lot4 - Buyer2 Bid Result");
+  });
+});
+
+Then("buyer 2 closes winner notification", async ({ $testInfo }) => {
+  await step("Buyer 2 - Verify winner modal and close", async () => {
+    // Buyer 2 HARUS dapat "You are the winner" karena dia highest bidder
+    const winnerModal = buyerPage2.locator('text=You are the winner');
+    await winnerModal.waitFor({ state: "visible", timeout: 10000 });
+
+    expect(
+      await winnerModal.isVisible(),
+      "[Multiple Bidders] Modal 'You are the winner' tidak muncul di Buyer 2"
+    ).toBe(true);
+
+    console.log("[Buyer2] ✅ Winner modal confirmed");
+    await attachScreenshot($testInfo, buyerPage2, "Lot4 - Buyer2 Winner Modal");
+
+    const closeBtn = buyerPage2.getByRole('button', { name: 'Close', exact: true });
+    await closeBtn.waitFor({ state: "visible", timeout: 5000 });
+    await closeBtn.click();
+    await buyerPage2.waitForTimeout(1000);
+    console.log("[Buyer2] Winner modal closed");
+    await attachScreenshot($testInfo, buyerPage2, "Lot4 - Buyer2 After Winner Modal");
+  });
+});
+
+Then("buyer 1 should not see winner notification", async ({ $testInfo }) => {
+  await step("Buyer 1 - Verify NO winner notification (outbid by Buyer 2)", async () => {
+    // Buyer 1 TIDAK boleh dapat "You are the winner" karena kalah bid
+    const winnerModal = buyerPage.locator('text=You are the winner');
+    const hasWinner = await winnerModal.isVisible({ timeout: 5000 }).catch(() => false);
+
+    expect(
+      hasWinner,
+      "[Multiple Bidders] Modal 'You are the winner' muncul di Buyer 1 padahal Buyer 2 yang menang"
+    ).toBe(false);
+
+    console.log("[Buyer1] ✅ No winner notification confirmed (outbid by Buyer 2)");
+    await attachScreenshot($testInfo, buyerPage,  "Lot4 - Buyer1 No Winner Modal");
+    await attachScreenshot($testInfo, buyerPage2, "Lot4 - Buyer2 Winner Confirmed");
   });
 });
 
