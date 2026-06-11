@@ -78,6 +78,20 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
 
+    // ── Backoffice ─────────────────────────────────────────────────────────────
+    {
+      name: "backoffice",
+      testDir: backofficeTestDir,
+      fullyParallel: false,
+      workers: 1,
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: process.env.BACKOFFICE_URL,
+        storageState: ".auth/backoffice.json",
+      },
+      dependencies: ["setup-backoffice"],
+    },
+
     // ── E2E (Full Flow across apps) ────────────────────────────────────────────
     // Mencakup: backoffice setup → live auction (conductor + buyer).
     // fullyParallel: false agar 01_backoffice_setup selesai sebelum 02_auction_live.

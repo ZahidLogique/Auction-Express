@@ -54,8 +54,9 @@ Given(
     await expect(page).toHaveURL(/\/en\/vehicle\/car/, { timeout: 20000 });
     await page.waitForLoadState("networkidle");
 
-    // Pastikan list page siap (Livewire selesai mount) sebelum Given selesai
-    await page.locator("button#search").waitFor({ state: "visible", timeout: 15000 });
+    // Pastikan list page siap — tunggu tombol Search (cyan/info) muncul
+    await page.locator("button:has-text('Search')").first()
+      .waitFor({ state: "attached", timeout: 30000 });
     await takeScreenshot(page, $testInfo, "Vehicle Created - Redirected to List");
   }
 );

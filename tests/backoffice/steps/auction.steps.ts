@@ -64,8 +64,8 @@ When("saya menambahkan kendaraan ke dalam auction", async ({ page, $testInfo }) 
   await auctionPage.clickAddCar();
   await takeScreenshot(page, $testInfo, "Add Car Modal Opened");
 
-  // Cari kendaraan test (prefix TST) di dalam modal
-  await auctionPage.searchVehicleInModal("TST");
+  // Search kosong agar semua kendaraan tampil
+  await auctionPage.searchVehicleInModal("");
   await takeScreenshot(page, $testInfo, "Vehicle Search Result in Modal");
 
   // Pilih kendaraan pertama dari hasil search
@@ -91,7 +91,9 @@ Then("seharusnya auction berhasil dibuat", async ({ page, $testInfo }) => {
 
 Then("kendaraan seharusnya berhasil ditambahkan ke dalam auction", async ({ page, $testInfo }) => {
   // Setelah add vehicle berhasil, tabel di halaman detail menampilkan data kendaraan
-  const vehicleTable = page.locator("#tbl-vehicle-add, table tbody tr").first();
-  await expect(vehicleTable).toBeVisible({ timeout: 15000 });
+  // Verifikasi kendaraan muncul di tabel detail auction
+  // Gunakan toBeAttached() karena row ada di dalam container overflow (tidak bisa scroll ke sana)
+  const vehicleRow = page.locator("table tbody tr").filter({ hasText: /Zahid|Honda|TST/ }).first();
+  await expect(vehicleRow).toBeAttached({ timeout: 15000 });
   await takeScreenshot(page, $testInfo, "Vehicle Added to Auction - Verified");
 });

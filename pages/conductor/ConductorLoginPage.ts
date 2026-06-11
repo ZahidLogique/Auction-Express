@@ -26,6 +26,7 @@ export class ConductorLoginPage {
     }
     await this.emailInput.fill(user);
     await this.passwordInput.fill(pass);
+
     await this.loginButton.click();
   }
 }

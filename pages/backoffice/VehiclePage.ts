@@ -50,6 +50,8 @@ export class VehiclePage {
 
   async gotoList() {
     await this.page.goto("/en/vehicle/car");
+    await this.page.waitForLoadState("domcontentloaded");
+    await this.page.waitForTimeout(2000); // tunggu Livewire mount
   }
 
   /**

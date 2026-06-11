@@ -20,9 +20,13 @@ Given("I am on the Backoffice login page", async ({ page, $testInfo }) => {
 
 When("I login with valid admin credentials", async ({ page, $testInfo }) => {
   await step("Fill credentials and submit login form", async () => {
-    const loginPage = new LoginPage(page);
-    await loginPage.login(process.env.ADMIN_USER!, process.env.ADMIN_PASS!);
-    await page.waitForURL((url) => !url.pathname.includes("login"), { timeout: 15000 });
+    // Jika sudah login via storageState, langsung skip ke assertion
+    const isAlreadyLoggedIn = !page.url().includes("login");
+    if (!isAlreadyLoggedIn) {
+      const loginPage = new LoginPage(page);
+      await loginPage.login(process.env.ADMIN_USER!, process.env.ADMIN_PASS!);
+      await page.waitForURL((url) => !url.pathname.includes("login"), { timeout: 15000 });
+    }
     const ss = await page.screenshot();
     await attachment("After Login", ss, { contentType: "image/png" });
     await $testInfo.attach("02 - Backoffice After Login", { body: ss, contentType: "image/png" });

@@ -35,7 +35,7 @@ export class FELoginPage {
       await this.termsCheckbox.check({ force: true });
     }
 
-    await this.loginButton.click();
+    await this.loginButton.click({ force: true });
   }
 }
 

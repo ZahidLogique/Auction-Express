@@ -9,6 +9,6 @@ setup("authenticate fe-conductor", async ({ page }) => {
   await page.goto(process.env.FE_CONDUCTOR_URL!);
   await loginPage.login(process.env.CONDUCTOR_USER!, process.env.CONDUCTOR_PASS!);
   
-  await expect(page).not.toHaveURL(/.*login/);
+  await expect(page).not.toHaveURL(/.*login/, { timeout: 15000 });
   await page.context().storageState({ path: authFile });
 });

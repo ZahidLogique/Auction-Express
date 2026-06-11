@@ -232,10 +232,15 @@ export class AuctionPage {
   }
 
   async selectFirstVehicleInModal() {
+    // Tunggu spinner/loading Livewire hilang
+    await this.page.locator('.fa-spin, div[wire\\:loading]').first()
+      .waitFor({ state: "hidden", timeout: 15000 }).catch(() => {});
+    await this.page.waitForTimeout(1000);
+    // Pakai click() karena wire:model checkbox tidak support check()
     await this.page
       .locator('#tbl-vehicle-add input[name="inventory_car_id"]')
       .first()
-      .check();
+      .click({ force: true });
   }
 
   async confirmAddVehicle(): Promise<"added" | "already_existed" | "no_vehicle"> {

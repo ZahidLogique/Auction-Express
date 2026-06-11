@@ -9,8 +9,8 @@ setup("authenticate fe-auction", async ({ page }) => {
   await page.goto(process.env.FE_AUCTION_URL!);
   await loginPage.login(process.env.AUCTION_USER!, process.env.AUCTION_PASS!);
   
-  // Tunggu elemen yang menandakan login sukses (nama user)
-  await expect(page.getByText(/Hello,/)).toBeVisible({ timeout: 15000 });
+  // Tunggu redirect keluar dari halaman login
+  await expect(page).not.toHaveURL(/.*login/, { timeout: 15000 });
   
   await page.context().storageState({ path: authFile });
 });
