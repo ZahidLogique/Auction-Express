@@ -39,12 +39,14 @@ export class AuctionPage {
 
   async gotoList() {
     await this.page.goto("/en/auction-management/auction");
-    await this.page.waitForLoadState("networkidle");
+    await this.page.waitForLoadState("domcontentloaded");
+    await this.createButton.waitFor({ state: "visible", timeout: 30000 });
   }
 
   async clickCreateAuctionCalendar() {
+    await this.createButton.waitFor({ state: "visible", timeout: 15000 });
     await this.createButton.click();
-    await this.page.waitForLoadState("networkidle");
+    await this.page.waitForLoadState("domcontentloaded");
   }
 
   // ── Select2 Helper (by element id) ────────────────────────────────────────

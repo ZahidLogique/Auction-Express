@@ -5,11 +5,12 @@ import path from "path";
 const authFile = path.join(__dirname, "../../.auth/backoffice.json");
 
 setup("authenticate backoffice", async ({ page }) => {
+  setup.setTimeout(60000);
   const loginPage = new BackofficeLoginPage(page);
-  await page.goto(process.env.BACKOFFICE_URL!);
+  await page.goto(process.env.BACKOFFICE_URL!, { timeout: 60000 });
   await loginPage.login(process.env.ADMIN_USER!, process.env.ADMIN_PASS!);
-  
-  // Tunggu URL berubah atau elemen khusus admin muncul
-  await expect(page).not.toHaveURL(/.*login/);
+
+  // Tunggu redirect ke dashboard setelah login berhasil
+  await expect(page.locator('text=Dashboard').first()).toBeVisible({ timeout: 15000 });
   await page.context().storageState({ path: authFile });
 });

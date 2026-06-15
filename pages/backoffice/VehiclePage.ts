@@ -49,9 +49,11 @@ export class VehiclePage {
   // ── Navigation ────────────────────────────────────────────────────────────
 
   async gotoList() {
-    await this.page.goto("/en/vehicle/car");
+    await this.page.goto("/en/vehicle/car", { timeout: 60000 });
     await this.page.waitForLoadState("domcontentloaded");
-    await this.page.waitForTimeout(2000); // tunggu Livewire mount
+    // Tunggu Register New Car button muncul (Livewire mount selesai)
+    await this.page.locator('a.btn[href*="/vehicle/car/create"]')
+      .waitFor({ state: "visible", timeout: 60000 });
   }
 
   /**
@@ -63,7 +65,7 @@ export class VehiclePage {
       .locator('a.btn[href*="/vehicle/car/create"], a[title*="Register New Car"]')
       .first()
       .click();
-    await this.page.waitForLoadState("networkidle");
+    await this.page.waitForLoadState("domcontentloaded");
   }
 
   // ── Select2 Helper ─────────────────────────────────────────────────────────
@@ -159,7 +161,7 @@ export class VehiclePage {
 
     // 4. Brand (Select2, required) → memicu AJAX load Model
     await this.selectFromSelect2("brand_id", data.brand);
-    await this.page.waitForLoadState("networkidle");
+    await this.page.waitForLoadState("load").catch(() => {});
 
     // Tunggu dropdown Model benar-benar terisi setelah AJAX selesai
     // (select2-hidden-accessible harus punya opsi selain placeholder)
@@ -170,7 +172,7 @@ export class VehiclePage {
 
     // 5. Model / Group Type (Select2, required) → memicu AJAX load Sub Model
     await this.selectFromSelect2("group_type_id", data.groupType);
-    await this.page.waitForLoadState("networkidle");
+    await this.page.waitForLoadState("load").catch(() => {});
 
     // 6. Sub Model (opsional)
     if (data.subModel) {

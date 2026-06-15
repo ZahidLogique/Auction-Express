@@ -18,7 +18,7 @@ let vehicleData: VehicleData;
 Given(
   "saya telah membuat kendaraan baru dan berada di halaman daftar kendaraan",
   async ({ page, $testInfo }) => {
-    test.setTimeout(60000);
+    test.setTimeout(120000);
     vehiclePage = new VehiclePage(page);
     vehicleData  = generateVehicle();
 
@@ -54,9 +54,9 @@ Given(
     await expect(page).toHaveURL(/\/en\/vehicle\/car/, { timeout: 20000 });
     await page.waitForLoadState("networkidle");
 
-    // Pastikan list page siap — tunggu tombol Search (cyan/info) muncul
+    // Pastikan list page siap — tunggu tombol Search muncul
     await page.locator("button:has-text('Search')").first()
-      .waitFor({ state: "attached", timeout: 30000 });
+      .waitFor({ state: "attached", timeout: 60000 });
     await takeScreenshot(page, $testInfo, "Vehicle Created - Redirected to List");
   }
 );

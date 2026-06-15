@@ -18,7 +18,11 @@ export class BackofficeLoginPage {
   async login(user: string, pass: string) {
     if (await this.languageSelect.isVisible()) {
       await this.languageSelect.selectOption("en");
+      // Tunggu page reload setelah ganti bahasa
+      await this.page.waitForLoadState("domcontentloaded");
+      await this.page.waitForTimeout(500);
     }
+    await this.usernameInput.waitFor({ state: "visible", timeout: 10000 });
     await this.usernameInput.fill(user);
     await this.passwordInput.fill(pass);
     await this.loginButton.click();

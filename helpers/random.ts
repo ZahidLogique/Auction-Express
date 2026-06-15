@@ -110,10 +110,11 @@ export interface AuctionData {
  * Tanggal selalu hari ini, jam mulai 06:00.
  */
 export function generateAuction(): AuctionData {
-  const today = new Date();
-  const dd    = String(today.getDate()).padStart(2, "0");
-  const mm    = String(today.getMonth() + 1).padStart(2, "0");
-  const yyyy  = today.getFullYear();
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const dd    = String(tomorrow.getDate()).padStart(2, "0");
+  const mm    = String(tomorrow.getMonth() + 1).padStart(2, "0");
+  const yyyy  = tomorrow.getFullYear();
   const num   = randDigits(4);
 
   return {
@@ -126,7 +127,7 @@ export function generateAuction(): AuctionData {
     method:      "online",
     startTimer:  "10",
     resetTimer:  "10",
-    startTime:   "06:00",
+    startTime:   "23:00",
     eventType:   "sequence",
   };
 }
