@@ -35,6 +35,16 @@ function randDigits(length: number): string {
   return Array.from({ length }, () => Math.floor(Math.random() * 10)).join("");
 }
 
+async function gotoWithRetry(page: any, url: string, retries = 3, delayMs = 5000) {
+  for (let i = 0; i < retries; i++) {
+    await page.goto(url);
+    const is5xx = await page.locator("text=/50[0-9] /").isVisible({ timeout: 3000 }).catch(() => false);
+    if (!is5xx) return;
+    console.log(`[Retry] Server error on ${url}, waiting ${delayMs}ms before retry ${i + 1}/${retries}`);
+    await page.waitForTimeout(delayMs);
+  }
+}
+
 const REGRESSION_VEHICLES = [
   {
     licensePlate:  () => `VH1${randDigits(4)}`,
@@ -140,7 +150,7 @@ async function addVehicle(
 
   await step(`Navigate to vehicle list`, async () => {
     const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
-    await page.goto(`${baseUrl}/en/vehicle/car`);
+    await gotoWithRetry(page, `${baseUrl}/en/vehicle/car`);
     await page.locator('a[href*="/vehicle/car/create"]').waitFor({ state: "visible", timeout: 15000 });
   });
 
@@ -185,7 +195,7 @@ async function addVehicle(
   await step(`V1 - Verify license plate "${licensePlate}" in vehicle list`, async () => {
     // Navigate fresh ke list agar Livewire component selalu dalam state bersih
     const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
-    await page.goto(`${baseUrl}/en/vehicle/car`);
+    await gotoWithRetry(page, `${baseUrl}/en/vehicle/car`);
     await vehiclePage.searchVehicle(licensePlate);
     const row = vehiclePage.getRow(licensePlate);
     await expect(row).toBeVisible({ timeout: 10000 });
@@ -315,7 +325,7 @@ When("I create a new auction session", async ({ page, $testInfo }) => {
 
   await step("Navigate to auction list", async () => {
     const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
-    await page.goto(`${baseUrl}/en/auction-management/auction`);
+    await gotoWithRetry(page, `${baseUrl}/en/auction-management/auction`);
     await page.locator('a.btn-success[href*="create"]').waitFor({ state: "visible", timeout: 15000 });
 
     const ss = await page.screenshot();
@@ -337,12 +347,13 @@ When("I create a new auction session", async ({ page, $testInfo }) => {
       resetTimer:  auctionData.resetTimer,
       startTime:   auctionData.startTime,
       eventType:   auctionData.eventType,
+      duration:    auctionData.duration,
     });
   });
 
   await step("Save auction and verify", async () => {
     await auctionPage.save();
-    await expect(page).toHaveURL(/\/en\/auction-management\/auction/, { timeout: 20000 });
+    await expect(page).toHaveURL(/\/en\/auction-management\/auction(\?|$)/, { timeout: 20000 });
     await page.waitForLoadState("domcontentloaded");
 
     const ss = await page.screenshot();

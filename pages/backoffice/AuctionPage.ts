@@ -146,6 +146,7 @@ export class AuctionPage {
     resetTimer:  string;
     startTime:   string;
     eventType:   string;
+    duration?:   string;
   }) {
     // 1. Auction Date (Pikaday datepicker — fill langsung)
     await this.auctionDateInput.fill(data.date);
@@ -184,6 +185,15 @@ export class AuctionPage {
 
     // 11. Start Time (Flatpickr — readonly, pakai JS API)
     await this.setFlatpickrTime(data.startTime);
+
+    // 12. Duration (Hours) — field di samping radio Sequence/Listings
+    if (data.duration) {
+      const durationInput = this.page.locator('input[name="duration"]').first();
+      const hasDuration = await durationInput.isVisible({ timeout: 2000 }).catch(() => false);
+      if (hasDuration) {
+        await durationInput.fill(data.duration);
+      }
+    }
   }
 
   async save() {

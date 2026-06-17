@@ -103,6 +103,7 @@ export interface AuctionData {
   resetTimer:  string;  // detik, default 10
   startTime:   string;  // HH:MM format 24h
   eventType:   string;  // "sequence" | "listings"
+  duration:    string;  // jam, contoh "8"
 }
 
 /**
@@ -110,11 +111,13 @@ export interface AuctionData {
  * Tanggal selalu hari ini, jam mulai 06:00.
  */
 export function generateAuction(): AuctionData {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const dd    = String(tomorrow.getDate()).padStart(2, "0");
-  const mm    = String(tomorrow.getMonth() + 1).padStart(2, "0");
-  const yyyy  = tomorrow.getFullYear();
+  // Pikaday datepicker shifts date +1 day due to UTC handling,
+  // so we pass yesterday to get today stored on the server.
+  const today = new Date();
+  today.setDate(today.getDate() - 1);
+  const dd    = String(today.getDate()).padStart(2, "0");
+  const mm    = String(today.getMonth() + 1).padStart(2, "0");
+  const yyyy  = today.getFullYear();
   const num   = randDigits(4);
 
   return {
@@ -129,6 +132,7 @@ export function generateAuction(): AuctionData {
     resetTimer:  "10",
     startTime:   "23:00",
     eventType:   "sequence",
+    duration:    "8",
   };
 }
 

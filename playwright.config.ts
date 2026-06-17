@@ -53,6 +53,7 @@ export default defineConfig({
   ],
   use: {
     headless: false,
+    channel: "chrome",
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     viewport: { width: 1920, height: 1080 },
@@ -102,6 +103,8 @@ export default defineConfig({
       workers: 1,
       use: {
         ...devices["Desktop Chrome"],
+        baseURL: process.env.BACKOFFICE_URL,
+        storageState: ".auth/backoffice.json",
       },
       dependencies: ["setup-backoffice"],
     },
