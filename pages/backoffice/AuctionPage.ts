@@ -248,11 +248,21 @@ export class AuctionPage {
     await this.page.locator('.fa-spin, div[wire\\:loading]').first()
       .waitFor({ state: "hidden", timeout: 15000 }).catch(() => {});
     await this.page.waitForTimeout(1000);
-    // Pakai click() karena wire:model checkbox tidak support check()
-    await this.page
+
+    const checkbox = this.page
       .locator('#tbl-vehicle-add input[name="inventory_car_id"]')
-      .first()
-      .click({ force: true });
+      .first();
+
+    // Pakai click() karena wire:model checkbox tidak support check()
+    await checkbox.click({ force: true });
+    await this.page.waitForTimeout(500);
+
+    // Verifikasi ter-check, retry sekali jika belum
+    const isChecked = await checkbox.isChecked().catch(() => false);
+    if (!isChecked) {
+      await checkbox.click({ force: true });
+      await this.page.waitForTimeout(500);
+    }
   }
 
   async confirmAddVehicle(): Promise<"added" | "already_existed" | "no_vehicle"> {
@@ -260,7 +270,17 @@ export class AuctionPage {
     const checked = await this.page
       .locator('#tbl-vehicle-add input[name="inventory_car_id"]:checked')
       .count();
-    if (checked === 0) return "no_vehicle";
+    if (checked === 0) {
+      // Tutup modal sebelum lanjut supaya tidak overlap ke iterasi berikutnya
+      const cancelBtn = this.page.locator('#modal-add-vehicle').locator('button:has-text("Cancel")');
+      if (await cancelBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await cancelBtn.click();
+      } else {
+        await this.page.keyboard.press("Escape");
+      }
+      await this.page.waitForTimeout(500);
+      return "no_vehicle";
+    }
 
     await this.page
       .locator('#modal-add-vehicle .btn-primary:has-text("Yes")')

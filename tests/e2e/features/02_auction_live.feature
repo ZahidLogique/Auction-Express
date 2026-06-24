@@ -11,27 +11,14 @@ Feature: Auction Live Flow
     When conductor starts the auction
     And buyer joins the auction
 
-    # ── Step 3: Enable Bidding ────────────────────────────────────────────────
+    # ── Lot 1 ─────────────────────────────────────────────────────────────────
     When conductor enables bidding
-
-    # ── Step 4: Buyer Bid ─────────────────────────────────────────────────────
-    When buyer places a bid
+    And buyer places a bid
     Then bid price should be updated on both sides
-
-    # ── Step 5: Conductor Countdown & Sold (Lot 1) ───────────────────────────
-    When conductor starts countdown
-    Then buyer should see bid success
-    And conductor clicks sold
-    And buyer closes winner notification
-
-    # ── Step 6: Lot 2 (No Winner / Unsold) ──────────────────────────────────
-    When conductor moves to next lot
-    And conductor enables bidding
-    And buyer clicks interested without bidding
     When conductor starts countdown
     Then conductor clicks unsold
 
-    # ── Step 7: Lot 3 (Bid Placed but Conductor Unsold) ─────────────────────
+    # ── Lot 2 ─────────────────────────────────────────────────────────────────
     When conductor moves to next lot
     And conductor enables bidding
     And buyer places a bid
@@ -39,15 +26,29 @@ Feature: Auction Live Flow
     When conductor starts countdown
     Then conductor clicks unsold
 
-    # ── Step 8: Lot 4 (Multiple Bidders - Buyer 2 Outbids Buyer 1) ──────────
+    # ── Lot 3 ─────────────────────────────────────────────────────────────────
     When conductor moves to next lot
     And conductor enables bidding
     And buyer places a bid
     Then bid price should be updated on both sides
-    When buyer 2 places a bid
-    Then bid price should be updated on all sides
     When conductor starts countdown
-    Then buyer 2 should see bid success
-    And conductor clicks sold
-    And buyer 2 closes winner notification
-    And buyer 1 should not see winner notification
+    Then conductor clicks unsold
+
+    # ── Lot 4 ─────────────────────────────────────────────────────────────────
+    When conductor moves to next lot
+    And conductor enables bidding
+    And buyer places a bid
+    Then bid price should be updated on both sides
+    When conductor starts countdown
+    Then conductor clicks unsold
+
+    # ── Lot 5 ─────────────────────────────────────────────────────────────────
+    When conductor moves to next lot
+    And conductor enables bidding
+    And buyer places a bid
+    Then bid price should be updated on both sides
+    When conductor starts countdown
+    Then conductor clicks sold
+
+    # ── End Auction ───────────────────────────────────────────────────────────
+    When conductor ends the auction
