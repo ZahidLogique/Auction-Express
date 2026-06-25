@@ -328,6 +328,23 @@ When("conductor enables bidding", async ({ $testInfo }) => {
   await doEnableBidding($testInfo);
 });
 
+When("conductor broadcasts a message", async ({ $testInfo }) => {
+  await step("Conductor - Broadcast message", async () => {
+    const broadcastInput = conductorPage.locator('textarea[maxlength="200"]').first();
+    await broadcastInput.waitFor({ state: "visible", timeout: 10000 });
+    await broadcastInput.fill(" Test Broadcast ");
+
+    const updateBtn = conductorPage.locator('button:has-text("Update")').first();
+    await updateBtn.waitFor({ state: "visible", timeout: 5000 });
+    await expect(updateBtn).toBeEnabled({ timeout: 5000 });
+    await updateBtn.click();
+    await conductorPage.waitForTimeout(500);
+
+    console.log("[Conductor] Broadcast message sent: ' Test Broadcast '");
+    await attachScreenshot($testInfo, conductorPage, "04b - Conductor After Broadcast");
+  });
+});
+
 // ── Step 4: Buyer Bid ─────────────────────────────────────────────────────────
 
 When("buyer places a bid", async ({ $testInfo }) => {
@@ -373,6 +390,28 @@ When("buyer places a bid", async ({ $testInfo }) => {
       console.log("[Buyer] Bid confirmed via modal");
     }
     await attachScreenshot($testInfo, buyerPage, "05c - Buyer After Offer +5000");
+  });
+});
+
+When("buyer sends a message", async ({ $testInfo }) => {
+  await step("Buyer - Send message in auction room", async () => {
+    const sendMsgTab = buyerPage.locator('[role="tab"]:has-text("Send Message")');
+    await sendMsgTab.waitFor({ state: "visible", timeout: 10000 });
+    await sendMsgTab.click();
+    await buyerPage.waitForTimeout(500);
+
+    const msgInput = buyerPage.locator('input[maxlength="50"]');
+    await msgInput.waitFor({ state: "visible", timeout: 5000 });
+    await msgInput.fill(" Test Message ");
+
+    const sendBtn = buyerPage.locator('button[type="button"]:has-text("Send")').last();
+    await sendBtn.waitFor({ state: "visible", timeout: 5000 });
+    await expect(sendBtn).toBeEnabled({ timeout: 5000 });
+    await sendBtn.click();
+    await buyerPage.waitForTimeout(500);
+
+    console.log("[Buyer] Message sent: ' Test Message '");
+    await attachScreenshot($testInfo, buyerPage, "05d - Buyer After Send Message");
   });
 });
 

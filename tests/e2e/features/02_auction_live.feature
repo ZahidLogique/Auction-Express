@@ -13,7 +13,9 @@ Feature: Auction Live Flow
 
     # ── Lot 1 ─────────────────────────────────────────────────────────────────
     When conductor enables bidding
+    And conductor broadcasts a message
     And buyer places a bid
+    And buyer sends a message
     Then bid price should be updated on both sides
     When conductor starts countdown
     Then conductor clicks unsold
