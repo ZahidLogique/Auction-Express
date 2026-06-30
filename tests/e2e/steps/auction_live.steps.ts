@@ -80,7 +80,7 @@ async function verifyVehicleDataInRoom(vehicle: CreatedVehicle, lotLabel: string
 // ── Step 1: Login ─────────────────────────────────────────────────────────────
 
 When("conductor and buyer login in parallel", async ({ browser, $testInfo }) => {
-  test.setTimeout(300000);
+  test.setTimeout(600000);
   currentLotIndex = 0;
   conductorContext = await browser.newContext();
   buyerContext     = await browser.newContext();
@@ -522,7 +522,81 @@ When("conductor ends the auction", async ({ $testInfo }) => {
   });
 });
 
-// ── Step 7: Move to Next Lot ──────────────────────────────────────────────────
+// ── Step 7: Reset Sold Vehicle ───────────────────────────────────────────────
+
+When("backoffice resets sold vehicle", async ({ page, $testInfo }) => {
+  const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
+
+  await step("Backoffice - Cancel payment for Z555AUT", async () => {
+    await page.goto(`${baseUrl}/en/register-payment/payment`);
+    await page.waitForLoadState("domcontentloaded");
+
+    // Search Z555AUT
+    await page.locator('input[wire\\:model\\.defer="filter.search"]').fill("Z555AUT");
+    await page.locator('button:has-text("Search")').first().click();
+    await page.waitForTimeout(2000);
+
+    // Dblclick first unpaid row → open detail in new tab
+    const [detailPage] = await Promise.all([
+      page.waitForEvent("popup"),
+      page.locator("tr").filter({ hasText: "unpaid" }).first().locator("td.clickable-row").first().dblclick(),
+    ]);
+    await detailPage.waitForLoadState("domcontentloaded");
+    console.log("[Backoffice] Opened payment detail");
+
+    // Click X button (Cancel Unit)
+    await detailPage.locator("button.btn-danger.btn-sm").first().click();
+
+    // Wait for modal to be fully visible before clicking Yes
+    await detailPage.locator("#modal_cancel").waitFor({ state: "visible", timeout: 5000 });
+    await detailPage.locator("#modal_cancel button[type='submit']").click();
+    await detailPage.waitForLoadState("domcontentloaded");
+    await detailPage.waitForTimeout(3000);
+
+    console.log("[Backoffice] Payment for Z555AUT cancelled");
+    await attachScreenshot($testInfo, detailPage, "100 - Backoffice Payment Cancelled");
+    await detailPage.close();
+  });
+
+  await step("Backoffice - Reset Z555AUT status to Un-Sold", async () => {
+    await page.goto(`${baseUrl}/en/vehicle/car`);
+    await page.waitForLoadState("domcontentloaded");
+
+    // Search Z555AUT
+    await page.locator('input[wire\\:model\\.defer="filter.search"]').fill("Z555AUT");
+    await page.locator('button.btn-info').click();
+    await page.waitForTimeout(2000);
+
+    // Dblclick row → open vehicle detail in new tab
+    const [vehicleDetail] = await Promise.all([
+      page.waitForEvent("popup"),
+      page.locator("tr[ondblclick]").first().dblclick(),
+    ]);
+    await vehicleDetail.waitForLoadState("domcontentloaded");
+
+    // Click Edit link
+    await vehicleDetail.locator('a.btn.btn-primary:has-text("Edit")').click();
+    await vehicleDetail.waitForLoadState("domcontentloaded");
+    console.log("[Backoffice] Opened vehicle edit page");
+
+    // Change auction_status via Select2: click rendered value → select Un-Sold
+    await vehicleDetail.locator('#select2-auction_status_select-container').click();
+    await vehicleDetail.locator('li.select2-results__option:has-text("Un-Sold")').click();
+    await vehicleDetail.waitForTimeout(500);
+    console.log("[Backoffice] Changed status to Un-Sold");
+
+    // Save
+    await vehicleDetail.locator("button#btn_save").click();
+    await vehicleDetail.waitForLoadState("domcontentloaded");
+    await vehicleDetail.waitForTimeout(1000);
+
+    console.log("[Backoffice] Z555AUT status reset to Un-Sold");
+    await attachScreenshot($testInfo, vehicleDetail, "101 - Backoffice Vehicle Status Reset");
+    await vehicleDetail.close();
+  });
+});
+
+// ── Step 8: Move to Next Lot ──────────────────────────────────────────────────
 
 When("conductor moves to next lot", async ({ $testInfo }) => {
   await step("Conductor - Wait for next lot to load", async () => {

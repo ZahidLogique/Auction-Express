@@ -54,3 +54,4 @@ Feature: Auction Live Flow
 
     # ── End Auction ───────────────────────────────────────────────────────────
     When conductor ends the auction
+    And backoffice resets sold vehicle
