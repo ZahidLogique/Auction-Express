@@ -52,8 +52,8 @@ export default defineConfig({
     ["allure-playwright", { outputFolder: "allure-results", detail: true }],
   ],
   use: {
-    headless: false,
-    channel: "chrome",
+    headless: process.env.PLAYWRIGHT_HEADLESS === "true" ? true : false,
+    channel: process.env.PLAYWRIGHT_HEADLESS === "true" ? undefined : "chrome",
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     viewport: { width: 1920, height: 1080 },

@@ -51,6 +51,8 @@ jobs:
 
       - name: Run E2E tests
         run: npx playwright test --project=e2e
+        env:
+          PLAYWRIGHT_HEADLESS: true
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
