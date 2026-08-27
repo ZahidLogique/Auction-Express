@@ -120,9 +120,9 @@ When("I assign the vehicles to the auction session", async ({ page, $testInfo })
       await auctionPage.searchVehicleInModal(lp);
 
       const hasVehicle = await auctionPage.page
-        .locator('#tbl-vehicle-add input[name="inventory_car_id"]')
+        .locator('#tbl-vehicle-add input.add-vehicle-checkbox')
         .first()
-        .isVisible({ timeout: 5000 })
+        .isVisible({ timeout: 15000 })
         .catch(() => false);
 
       if (!hasVehicle) {

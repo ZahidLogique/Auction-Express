@@ -13,6 +13,7 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "@playwright/cli": "^0.1.17",
     "@playwright/test": "^1.59.1",
     "@types/node": "^24.10.2",
     "allure-commandline": "^2.38.1",

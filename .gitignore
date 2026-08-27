@@ -27,5 +27,9 @@ node_modules/
 # Test result JSON
 test-results.json
 
-# Claude Code local settings
-.claude/
+# Playwright CLI temp files (snapshots, screenshots dari sesi CLI)
+.playwright-cli/
+
+# Claude Code local settings (ignore semua kecuali skills)
+.claude/*
+!.claude/skills/

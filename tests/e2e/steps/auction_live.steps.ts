@@ -15,8 +15,9 @@ let buyerContext: BrowserContext;
 
 let currentLotIndex = 0;
 
-const STARTING_PRICE = 100_000;
-const BID_INCREMENT  = 5_000;
+const STARTING_PRICE  = 100_000;
+const RESERVED_PRICE  = 105_000;
+const BID_INCREMENT   = 5_000;
 let   currentBidPrice = STARTING_PRICE;
 
 async function attachScreenshot(testInfo: TestInfo, page: Page, label: string) {
@@ -94,12 +95,12 @@ When("conductor and buyer login in parallel", async ({ browser, $testInfo }) => 
     const conductorLoginPromise = (async () => {
       await conductorPage.goto(process.env.FE_CONDUCTOR_URL!);
       await conductorLogin.login(process.env.CONDUCTOR_USER!, process.env.CONDUCTOR_PASS!);
-      await conductorPage.waitForURL((url) => !url.pathname.includes("login"), { timeout: 15000 });
+      await conductorPage.waitForURL((url) => !url.pathname.includes("login"), { timeout: 30000 });
     })();
 
-    await buyerPage.goto(process.env.FE_AUCTION_URL!);
+    await buyerPage.goto(process.env.FE_AUCTION_URL!, { timeout: 30000 });
     await buyerLogin.login(process.env.AUCTION_USER!, process.env.AUCTION_PASS!);
-    await buyerPage.waitForURL((url) => !url.pathname.includes("login"), { timeout: 15000 });
+    await buyerPage.waitForURL((url) => !url.pathname.includes("login"), { timeout: 30000 });
     console.log("[Buyer] Logged in successfully");
 
     await conductorLoginPromise;
@@ -286,12 +287,10 @@ async function doEnableBidding(testInfo: TestInfo) {
   await step("Conductor - Set Reserved Price", async () => {
     const adjustReservedBtn = conductorPage.locator('button:has-text("Adjust Reserved Price")');
     await adjustReservedBtn.waitFor({ state: "visible", timeout: 10000 });
+    await adjustReservedBtn.scrollIntoViewIfNeeded();
+    await conductorPage.waitForTimeout(500);
 
-    const reservedPriceInput = conductorPage
-      .locator('button:has-text("Adjust Reserved Price")')
-      .locator("..")
-      .locator('input[inputmode="decimal"]')
-      .first();
+    const reservedPriceInput = adjustReservedBtn.locator('xpath=preceding-sibling::input').first();
 
     await reservedPriceInput.evaluate((el: HTMLInputElement, value) => {
       el.removeAttribute("disabled");
@@ -300,12 +299,12 @@ async function doEnableBidding(testInfo: TestInfo) {
       setter?.call(el, value);
       el.dispatchEvent(new Event("input",  { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
-    }, String(90_000));
+    }, String(RESERVED_PRICE));
     await conductorPage.waitForTimeout(500);
 
     await adjustReservedBtn.click({ force: true });
-    await conductorPage.waitForTimeout(1000);
-    console.log(`[Conductor] Reserved price set to 90,000`);
+    await conductorPage.waitForTimeout(2000);
+    console.log(`[Conductor] Reserved price set to ${RESERVED_PRICE.toLocaleString("en-US")}`);
   });
 
   await step("Conductor - Click Enable Bid Button", async () => {

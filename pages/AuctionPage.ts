@@ -233,7 +233,7 @@ export class AuctionPage {
 
   async selectFirstVehicleInModal() {
     await this.page
-      .locator('#tbl-vehicle-add input[name="inventory_car_id"]')
+      .locator('#tbl-vehicle-add input.add-vehicle-checkbox')
       .first()
       .check();
   }
@@ -241,7 +241,7 @@ export class AuctionPage {
   async confirmAddVehicle(): Promise<"added" | "already_existed" | "no_vehicle"> {
     // Cek dulu apakah ada vehicle yang dipilih
     const checked = await this.page
-      .locator('#tbl-vehicle-add input[name="inventory_car_id"]:checked')
+      .locator('#tbl-vehicle-add input.add-vehicle-checkbox:checked')
       .count();
     if (checked === 0) return "no_vehicle";
 
