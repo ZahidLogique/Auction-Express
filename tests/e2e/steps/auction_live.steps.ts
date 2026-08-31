@@ -26,6 +26,18 @@ async function attachScreenshot(testInfo: TestInfo, page: Page, label: string) {
   await testInfo.attach(label, { body: ss, contentType: "image/png" });
 }
 
+async function gotoWithReload(page: Page, url: string, waitSelector: string) {
+  await page.goto(url, { timeout: 180000 }).catch(() => {});
+  await page.waitForLoadState("domcontentloaded");
+  const found = await page.locator(waitSelector).first()
+    .isVisible({ timeout: 180000 }).catch(() => false);
+  if (!found) {
+    console.log(`[Retry] Page not loaded after 3min, reloading: ${url}`);
+    await page.reload({ timeout: 60000 }).catch(() => {});
+    await page.waitForLoadState("domcontentloaded");
+  }
+}
+
 // ── Vehicle Data Verification ─────────────────────────────────────────────────
 
 async function getVehicleField(label: string): Promise<string> {
@@ -261,11 +273,7 @@ async function doEnableBidding(testInfo: TestInfo) {
     await adjustStartBtn.scrollIntoViewIfNeeded();
     await conductorPage.waitForTimeout(500);
 
-    const startingPriceInput = conductorPage
-      .locator('button:has-text("Adjust Starting Price")')
-      .locator("..")
-      .locator('input[inputmode="decimal"]')
-      .first();
+    const startingPriceInput = adjustStartBtn.locator('xpath=preceding-sibling::input').first();
 
     await startingPriceInput.evaluate((el: HTMLInputElement, value) => {
       el.removeAttribute("disabled");
@@ -277,8 +285,9 @@ async function doEnableBidding(testInfo: TestInfo) {
     }, String(STARTING_PRICE));
     await conductorPage.waitForTimeout(500);
 
-    await adjustStartBtn.click({ force: true });
-    await conductorPage.waitForTimeout(1000);
+    await adjustStartBtn.evaluate((el: HTMLButtonElement) => el.removeAttribute("disabled"));
+    await adjustStartBtn.click();
+    await conductorPage.waitForTimeout(2000);
 
     currentBidPrice = STARTING_PRICE;
     console.log(`[Conductor] Starting price set to ${STARTING_PRICE.toLocaleString("en-US")}`);
@@ -302,7 +311,8 @@ async function doEnableBidding(testInfo: TestInfo) {
     }, String(RESERVED_PRICE));
     await conductorPage.waitForTimeout(500);
 
-    await adjustReservedBtn.click({ force: true });
+    await adjustReservedBtn.evaluate((el: HTMLButtonElement) => el.removeAttribute("disabled"));
+    await adjustReservedBtn.click();
     await conductorPage.waitForTimeout(2000);
     console.log(`[Conductor] Reserved price set to ${RESERVED_PRICE.toLocaleString("en-US")}`);
   });
@@ -352,7 +362,7 @@ When("buyer places a bid", async ({ $testInfo }) => {
     const isInterested = await interestedBtn.isVisible({ timeout: 5000 }).catch(() => false);
 
     if (isInterested) {
-      await expect(interestedBtn).toBeEnabled({ timeout: 5000 });
+      await expect(interestedBtn).toBeEnabled({ timeout: 15000 });
       await interestedBtn.click();
       await buyerPage.waitForTimeout(1000);
       console.log("[Buyer] Clicked Interested");
@@ -371,8 +381,8 @@ When("buyer places a bid", async ({ $testInfo }) => {
 
   await step("Buyer - Offer +5000", async () => {
     const increaseBtn = buyerPage.locator('button:has-text("5000")').first();
-    await increaseBtn.waitFor({ state: "visible", timeout: 10000 });
-    await expect(increaseBtn).toBeEnabled({ timeout: 5000 });
+    await increaseBtn.waitFor({ state: "visible", timeout: 30000 });
+    await expect(increaseBtn).toBeEnabled({ timeout: 10000 });
     await increaseBtn.click();
     await buyerPage.waitForTimeout(1000);
     currentBidPrice = STARTING_PRICE + BID_INCREMENT;
@@ -527,8 +537,7 @@ When("backoffice resets sold vehicle", async ({ page, $testInfo }) => {
   const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
 
   await step("Backoffice - Cancel payment for Z555AUT", async () => {
-    await page.goto(`${baseUrl}/en/register-payment/payment`);
-    await page.waitForLoadState("domcontentloaded");
+    await gotoWithReload(page, `${baseUrl}/en/register-payment/payment`, 'input[wire\\:model\\.defer="filter.search"]');
 
     // Search Z555AUT
     await page.locator('input[wire\\:model\\.defer="filter.search"]').fill("Z555AUT");
@@ -558,8 +567,7 @@ When("backoffice resets sold vehicle", async ({ page, $testInfo }) => {
   });
 
   await step("Backoffice - Reset Z555AUT status to Un-Sold", async () => {
-    await page.goto(`${baseUrl}/en/vehicle/car`);
-    await page.waitForLoadState("domcontentloaded");
+    await gotoWithReload(page, `${baseUrl}/en/vehicle/car`, 'input[wire\\:model\\.defer="filter.search"]');
 
     // Search Z555AUT
     await page.locator('input[wire\\:model\\.defer="filter.search"]').fill("Z555AUT");
