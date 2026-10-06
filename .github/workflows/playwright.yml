@@ -61,6 +61,25 @@ jobs:
         run: npx playwright test --project=e2e
         env:
           PLAYWRIGHT_HEADLESS: true
+          # Lewati screenshot per-step (hanya screenshot saat gagal) supaya report kecil & upload cepat
+          STEP_SCREENSHOTS: false
+
+      # Dashboard Allure dalam satu file HTML (bisa diunduh lalu dibuka langsung).
+      # env & categories ditulis SETELAH test karena global-setup mengosongkan allure-results saat run mulai.
+      - name: Generate Allure report (single file)
+        if: always()
+        run: |
+          node scripts/allure-env.js
+          node scripts/allure-categories.js
+          npx allure generate allure-results --clean --single-file -o allure-report
+
+      - name: Upload Allure report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-report
+          path: allure-report/
+          retention-days: 7
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

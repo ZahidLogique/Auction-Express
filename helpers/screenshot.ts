@@ -3,6 +3,24 @@ import fs from "fs";
 import path from "path";
 
 /**
+ * Screenshot per-step untuk laporan. Cukup attach SEKALI lewat testInfo.attach:
+ * allure-playwright sudah menyalinnya ke step Allure yang sama, jadi menambah
+ * attachment() Allure di atasnya hanya menggandakan file (ukuran report 2x).
+ *
+ * Set STEP_SCREENSHOTS=false (dipakai di CI) untuk melewatinya. Screenshot saat
+ * test gagal tetap diambil otomatis oleh Playwright ("only-on-failure").
+ */
+export async function attachStepScreenshot(
+  testInfo: TestInfo,
+  page: Page,
+  label: string
+): Promise<void> {
+  if (process.env.STEP_SCREENSHOTS === "false") return;
+  const body = await page.screenshot();
+  await testInfo.attach(label, { body, contentType: "image/png" });
+}
+
+/**
  * Ambil screenshot pada critical step, simpan ke screenshots/<TC-ID>/
  * dan attach ke Allure report secara otomatis.
  *

@@ -2,8 +2,9 @@ import { createBdd } from "playwright-bdd";
 import { expect, test } from "../../../fixtures/base";
 import { loadState } from "../../../fixtures/test-state";
 import type { BrowserContext, Page, TestInfo } from "@playwright/test";
-import { step, attachment } from "allure-js-commons";
+import { step } from "allure-js-commons";
 import { appears } from "../../../helpers/wait";
+import { attachStepScreenshot } from "../../../helpers/screenshot";
 import { ConductorLoginPage } from "../../../pages/conductor/ConductorLoginPage";
 import { FELoginPage } from "../../../pages/fe-auction/FELoginPage";
 import { BackofficeLoginPage } from "../../../pages/backoffice/LoginPage";
@@ -29,9 +30,7 @@ const BID_INCREMENT   = 5_000;
 let   currentBidPrice = STARTING_PRICE;
 
 async function attachScreenshot(testInfo: TestInfo, page: Page, label: string) {
-  const ss = await page.screenshot();
-  await attachment(label, ss, { contentType: "image/png" });
-  await testInfo.attach(label, { body: ss, contentType: "image/png" });
+  await attachStepScreenshot(testInfo, page, label);
 }
 
 async function waitOrReload(page: Page, waitSelector: string) {

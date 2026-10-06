@@ -1,10 +1,11 @@
 import { createBdd } from "playwright-bdd";
 import { expect, test } from "../../../fixtures/base";
 import { saveState } from "../../../fixtures/test-state";
-import { step, attachment } from "allure-js-commons";
+import { step } from "allure-js-commons";
 import { AuctionPage } from "../../../pages/backoffice/AuctionPage";
 import { generateAuction } from "../../../helpers/random";
 import { appears } from "../../../helpers/wait";
+import { attachStepScreenshot } from "../../../helpers/screenshot";
 
 const { When } = createBdd(test);
 
@@ -65,9 +66,7 @@ When("I create a new auction session", async ({ page, $testInfo }) => {
     await gotoWithRetry(page, `${baseUrl}/en/auction-management/auction`);
     await page.locator('a.btn-success[href*="create"]').waitFor({ state: "visible", timeout: 15000 });
 
-    const ss = await page.screenshot();
-    await attachment("Auction List Before Create", ss, { contentType: "image/png" });
-    await $testInfo.attach("01 - Auction List Before Create", { body: ss, contentType: "image/png" });
+    await attachStepScreenshot($testInfo, page, "01 - Auction List Before Create");
   });
 
   await step(`Fill auction form - ${auctionData.auctionName}`, async () => {
@@ -93,9 +92,7 @@ When("I create a new auction session", async ({ page, $testInfo }) => {
     await expect(page).toHaveURL(/\/en\/auction-management\/auction(\?|$)/, { timeout: 20000 });
     await page.waitForLoadState("domcontentloaded");
 
-    const ss = await page.screenshot();
-    await attachment(`Auction Created - ${createdAuctionName}`, ss, { contentType: "image/png" });
-    await $testInfo.attach(`02 - Auction Created (${createdAuctionName})`, { body: ss, contentType: "image/png" });
+    await attachStepScreenshot($testInfo, page, `02 - Auction Created (${createdAuctionName})`);
   });
 });
 
@@ -113,9 +110,7 @@ When("I assign the vehicles to the auction session", async ({ page, $testInfo })
     await auctionPage.searchAuction(createdAuctionName);
     await auctionPage.clickDetailByName(createdAuctionName);
 
-    const ss = await page.screenshot();
-    await attachment("Auction Detail Before Assign", ss, { contentType: "image/png" });
-    await $testInfo.attach("03 - Auction Detail Before Assign", { body: ss, contentType: "image/png" });
+    await attachStepScreenshot($testInfo, page, "03 - Auction Detail Before Assign");
   });
 
   for (const lp of createdLicensePlates) {
@@ -162,9 +157,7 @@ When("I assign the vehicles to the auction session", async ({ page, $testInfo })
       throw new Error(`Vehicle tidak ter-assign (${skippedPlates.length}/${createdLicensePlates.length}): ${skippedPlates.join(", ")}`);
     }
 
-    const ss = await page.screenshot();
-    await attachment("After Assign All Vehicles", ss, { contentType: "image/png" });
-    await $testInfo.attach("04 - Auction Detail After Assign All Vehicles", { body: ss, contentType: "image/png" });
+    await attachStepScreenshot($testInfo, page, "04 - Auction Detail After Assign All Vehicles");
   });
 });
 
@@ -179,16 +172,12 @@ When("I publish the auction session", async ({ page, $testInfo }) => {
     await page.waitForLoadState("domcontentloaded");
     await page.locator("#jadwallelang tbody").waitFor({ state: "visible", timeout: 15000 });
 
-    const ss = await page.screenshot();
-    await attachment("Auction List Before Publish", ss, { contentType: "image/png" });
-    await $testInfo.attach("05 - Auction List Before Publish", { body: ss, contentType: "image/png" });
+    await attachStepScreenshot($testInfo, page, "05 - Auction List Before Publish");
   });
 
   await step(`Publish auction - ${createdAuctionName}`, async () => {
     await auctionPage.publishAuction(createdAuctionName);
 
-    const ss = await page.screenshot();
-    await attachment("Auction Published", ss, { contentType: "image/png" });
-    await $testInfo.attach("06 - Auction Published", { body: ss, contentType: "image/png" });
+    await attachStepScreenshot($testInfo, page, "06 - Auction Published");
   });
 });
