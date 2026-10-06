@@ -9,19 +9,19 @@ dotenv.config({ path: path.resolve(__dirname, ".env") });
 
 const backofficeTestDir = defineBddConfig({
   features: "tests/backoffice/features/**/*.feature",
-  steps: ["tests/backoffice/steps/**/*.ts"],
+  steps: ["fixtures/**/*.ts", "tests/backoffice/steps/**/*.ts"],
   outputDir: ".features-gen/backoffice",
 });
 
 const feBuyerTestDir = defineBddConfig({
   features: "tests/fe-buyer/features/**/*.feature",
-  steps: ["tests/fe-buyer/steps/**/*.ts"],
+  steps: ["fixtures/**/*.ts", "tests/fe-buyer/steps/**/*.ts"],
   outputDir: ".features-gen/fe-buyer",
 });
 
 const feConductorTestDir = defineBddConfig({
   features: "tests/fe-conductor/features/**/*.feature",
-  steps: ["tests/fe-conductor/steps/**/*.ts"],
+  steps: ["fixtures/**/*.ts", "tests/fe-conductor/steps/**/*.ts"],
   outputDir: ".features-gen/fe-conductor",
 });
 
@@ -29,6 +29,7 @@ const e2eTestDir = defineBddConfig({
   features: "tests/e2e/features/**/*.feature",
   // E2E memuat SEMUA steps agar bisa reuse modul lain
   steps: [
+    "fixtures/**/*.ts",
     "tests/backoffice/steps/**/*.ts",
     "tests/fe-buyer/steps/**/*.ts",
     "tests/fe-conductor/steps/**/*.ts",

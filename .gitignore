@@ -27,6 +27,9 @@ node_modules/
 # Test result JSON
 test-results.json
 
+# State antar spec (file-based, di-clean tiap run oleh global-setup)
+.test-state.json
+
 # Playwright CLI temp files (snapshots, screenshots dari sesi CLI)
 .playwright-cli/
 

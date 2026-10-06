@@ -1,6 +1,6 @@
 Feature: Full E2E Auction Regression
 
-  Scenario: Complete Auction Life Cycle
+  Scenario: E2E-001: Complete Auction Life Cycle
 
     Given I am on the Backoffice login page
     When I login with valid admin credentials

@@ -1,9 +1,9 @@
 import { createBdd } from "playwright-bdd";
-import { expect } from "@playwright/test";
+import { expect, test } from "../../../fixtures/base";
 import { LoginPage } from "../../../pages/backoffice/LoginPage";
 import { step, attachment } from "allure-js-commons";
 
-const { Given, When, Then } = createBdd();
+const { Given, When, Then } = createBdd(test);
 
 // ─── Given ───────────────────────────────────────────────────────────────────
 

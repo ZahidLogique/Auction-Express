@@ -1,4 +1,5 @@
 import { Page, Locator } from "@playwright/test";
+import { appears } from "../../helpers/wait";
 
 export class AuctionPage {
   readonly page: Page;
@@ -68,7 +69,7 @@ export class AuctionPage {
       .waitFor({ state: "visible", timeout: 10000 });
 
     const searchField = this.page.locator(".select2-search__field").first();
-    const hasSearch   = await searchField.isVisible({ timeout: 1500 }).catch(() => false);
+    const hasSearch   = await appears(searchField, 1500);
 
     if (hasSearch) {
       await searchField.fill(text);
@@ -189,7 +190,7 @@ export class AuctionPage {
     // 12. Duration (Hours) — field di samping radio Sequence/Listings
     if (data.duration) {
       const durationInput = this.page.locator('input[name="duration"]').first();
-      const hasDuration = await durationInput.isVisible({ timeout: 2000 }).catch(() => false);
+      const hasDuration = await appears(durationInput, 2000);
       if (hasDuration) {
         await durationInput.fill(data.duration);
       }
@@ -239,7 +240,7 @@ export class AuctionPage {
     await this.page
       .locator('#tbl-vehicle-add tbody tr')
       .first()
-      .waitFor({ state: "visible", timeout: 15000 })
+      .waitFor({ state: "visible", timeout: 25000 })
       .catch(() => {}); // jika tidak ada hasil, lanjut saja
   }
 
@@ -273,7 +274,7 @@ export class AuctionPage {
     if (checked === 0) {
       // Tutup modal sebelum lanjut supaya tidak overlap ke iterasi berikutnya
       const cancelBtn = this.page.locator('#modal-add-vehicle').locator('button:has-text("Cancel")');
-      if (await cancelBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      if (await appears(cancelBtn, 2000)) {
         await cancelBtn.click();
       } else {
         await this.page.keyboard.press("Escape");
@@ -289,16 +290,28 @@ export class AuctionPage {
     // Tunggu sebentar untuk respons server
     await this.page.waitForTimeout(1500);
 
+    // Konfirmasi "Car is already in another auction" (beda tipe Listing vs Sequence):
+    // boleh dilanjutkan, mobil akan ada di kedua auction → klik Yes
+    const anotherAuctionPopup = this.page
+      .locator('.swal2-popup, [role="dialog"]')
+      .filter({ hasText: /already in another auction/i })
+      .last();
+    if (await appears(anotherAuctionPopup, 3000)) {
+      await anotherAuctionPopup.getByRole("button", { name: "Yes", exact: true }).click();
+      console.log("[Backoffice] Popup 'already in another auction' → Yes");
+      await this.page.waitForTimeout(1500);
+    }
+
     // Cek apakah muncul notifikasi error "already existed"
     const errorNotif = this.page.locator(
       '.swal2-popup, .alert-danger, [class*="toast"], [class*="notification"]'
     ).filter({ hasText: /already existed|already exist/i });
 
-    const hasError = await errorNotif.isVisible({ timeout: 2000 }).catch(() => false);
+    const hasError = await appears(errorNotif, 2000);
     if (hasError) {
       // Dismiss notifikasi error (klik OK/confirm jika ada, atau tekan Escape)
       const confirmBtn = this.page.locator('.swal2-confirm, button:has-text("OK")');
-      if (await confirmBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+      if (await appears(confirmBtn, 1000)) {
         await confirmBtn.click();
       } else {
         await this.page.keyboard.press("Escape");

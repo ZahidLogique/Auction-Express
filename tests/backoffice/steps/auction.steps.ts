@@ -1,10 +1,10 @@
 import { createBdd } from "playwright-bdd";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../../fixtures/base";
 import { AuctionPage } from "../../../pages/backoffice/AuctionPage";
 import { generateAuction, AuctionData } from "../../../helpers/random";
 import { takeScreenshot } from "../../../helpers/screenshot";
 
-const { Given, When, Then } = createBdd();
+const { Given, When, Then } = createBdd(test);
 
 let auctionPage: AuctionPage;
 let auctionData: AuctionData;

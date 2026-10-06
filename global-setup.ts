@@ -16,4 +16,7 @@ export default async function globalSetup() {
     console.log("🧹 allure-results cleaned");
   }
   fs.mkdirSync(allureResultsDir, { recursive: true });
+
+  // Clean state antar spec agar tidak memakai data run sebelumnya
+  fs.rmSync(path.join(process.cwd(), ".test-state.json"), { force: true });
 }

@@ -1,10 +1,12 @@
 import { createBdd } from "playwright-bdd";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../../fixtures/base";
+import { saveState } from "../../../fixtures/test-state";
 import { step, attachment } from "allure-js-commons";
 import { AuctionPage } from "../../../pages/backoffice/AuctionPage";
 import { generateAuction } from "../../../helpers/random";
+import { appears } from "../../../helpers/wait";
 
-const { When } = createBdd();
+const { When } = createBdd(test);
 
 // ── Shared State ──────────────────────────────────────────────────────────────
 
@@ -35,7 +37,7 @@ const REGRESSION_VEHICLES: CreatedVehicle[] = [
 
 export const createdVehicles: CreatedVehicle[] = [...REGRESSION_VEHICLES];
 const createdLicensePlates: string[]           = REGRESSION_VEHICLES.map(v => v.licensePlate);
-export let createdAuctionName: string          = "";
+let createdAuctionName: string                 = "";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -56,6 +58,7 @@ When("I create a new auction session", async ({ page, $testInfo }) => {
   const auctionPage = new AuctionPage(page);
   const auctionData = generateAuction();
   createdAuctionName = auctionData.auctionName;
+  saveState({ auctionName: createdAuctionName });
 
   await step("Navigate to auction list", async () => {
     const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
@@ -100,6 +103,7 @@ When("I create a new auction session", async ({ page, $testInfo }) => {
 
 When("I assign the vehicles to the auction session", async ({ page, $testInfo }) => {
   const auctionPage = new AuctionPage(page);
+  const skippedPlates: string[] = [];
 
   await step(`Open auction detail - ${createdAuctionName}`, async () => {
     const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
@@ -116,30 +120,48 @@ When("I assign the vehicles to the auction session", async ({ page, $testInfo })
 
   for (const lp of createdLicensePlates) {
     await step(`Assign vehicle ${lp} to auction`, async () => {
-      await auctionPage.clickAddCar();
-      await auctionPage.searchVehicleInModal(lp);
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        await auctionPage.clickAddCar();
+        await auctionPage.searchVehicleInModal(lp);
 
-      const hasVehicle = await auctionPage.page
-        .locator('#tbl-vehicle-add input.add-vehicle-checkbox')
-        .first()
-        .isVisible({ timeout: 15000 })
-        .catch(() => false);
+        const hasVehicle = await auctionPage.page
+          .locator('#tbl-vehicle-add input.add-vehicle-checkbox')
+          .first()
+          .waitFor({ state: "visible", timeout: 25000 })
+          .then(() => true)
+          .catch(() => false);
 
-      if (!hasVehicle) {
-        await auctionPage.page.keyboard.press("Escape");
-        console.log(`⚠️  Vehicle ${lp} not found in modal — skipped`);
-        return;
+        if (!hasVehicle) {
+          await auctionPage.page.keyboard.press("Escape");
+          console.log(`⚠️  Vehicle ${lp} not found in modal (attempt ${attempt}/3)`);
+          continue;
+        }
+
+        await auctionPage.selectFirstVehicleInModal();
+        const result = await auctionPage.confirmAddVehicle();
+        if (result === "added") {
+          // Pastikan benar-benar masuk: plat harus tampil di tabel Vehicle detail auction
+          const inList = await appears(auctionPage.page.locator("tr").filter({ hasText: lp }), 10000);
+          if (inList) return;
+          console.log(`⚠️  Vehicle ${lp} tidak muncul di daftar auction (attempt ${attempt}/3)`);
+          continue;
+        }
+
+        if (result === "already_existed") {
+          console.log(`⚠️  Vehicle ${lp} already in an auction — skipped`);
+          break;
+        }
+        console.log(`⚠️  Vehicle ${lp} tidak ter-pilih di modal (attempt ${attempt}/3)`);
       }
-
-      await auctionPage.selectFirstVehicleInModal();
-      const result = await auctionPage.confirmAddVehicle();
-      if (result === "already_existed") {
-        console.log(`⚠️  Vehicle ${lp} already in an auction — skipped`);
-      }
+      skippedPlates.push(lp);
     });
   }
 
   await step("Verify all vehicles assigned", async () => {
+    if (skippedPlates.length > 0) {
+      throw new Error(`Vehicle tidak ter-assign (${skippedPlates.length}/${createdLicensePlates.length}): ${skippedPlates.join(", ")}`);
+    }
+
     const ss = await page.screenshot();
     await attachment("After Assign All Vehicles", ss, { contentType: "image/png" });
     await $testInfo.attach("04 - Auction Detail After Assign All Vehicles", { body: ss, contentType: "image/png" });

@@ -1,6 +1,6 @@
 Feature: Auction Live Flow
 
-  Scenario: Parallel Auction Session - Conductor and Buyer
+  Scenario: E2E-002: Parallel Auction Session - Conductor and Buyer
 
     # ── Step 1: Parallel Login ─────────────────────────────────────────────────
     When conductor and buyer login in parallel

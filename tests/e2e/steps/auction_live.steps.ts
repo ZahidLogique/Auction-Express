@@ -1,12 +1,20 @@
 import { createBdd } from "playwright-bdd";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../../fixtures/base";
+import { loadState } from "../../../fixtures/test-state";
 import type { BrowserContext, Page, TestInfo } from "@playwright/test";
 import { step, attachment } from "allure-js-commons";
+import { appears } from "../../../helpers/wait";
 import { ConductorLoginPage } from "../../../pages/conductor/ConductorLoginPage";
 import { FELoginPage } from "../../../pages/fe-auction/FELoginPage";
-import { createdAuctionName, createdVehicles, type CreatedVehicle } from "./backoffice_setup.steps";
+import { BackofficeLoginPage } from "../../../pages/backoffice/LoginPage";
+import { createdVehicles, type CreatedVehicle } from "./backoffice_setup.steps";
 
-const { When, Then } = createBdd();
+const { When, Then } = createBdd(test);
+
+// Nama auction ditulis oleh 01_backoffice_setup lewat .test-state.json
+function getAuctionName(): string {
+  return (loadState().auctionName as string | undefined) ?? "";
+}
 
 export let conductorPage: Page;
 export let buyerPage: Page;
@@ -26,16 +34,33 @@ async function attachScreenshot(testInfo: TestInfo, page: Page, label: string) {
   await testInfo.attach(label, { body: ss, contentType: "image/png" });
 }
 
-async function gotoWithReload(page: Page, url: string, waitSelector: string) {
-  await page.goto(url, { timeout: 180000 }).catch(() => {});
+async function waitOrReload(page: Page, waitSelector: string) {
   await page.waitForLoadState("domcontentloaded");
   const found = await page.locator(waitSelector).first()
     .isVisible({ timeout: 180000 }).catch(() => false);
   if (!found) {
-    console.log(`[Retry] Page not loaded after 3min, reloading: ${url}`);
+    console.log(`[Retry] Page not loaded after 3min, reloading: ${page.url()}`);
     await page.reload({ timeout: 60000 }).catch(() => {});
     await page.waitForLoadState("domcontentloaded");
   }
+}
+
+async function gotoWithReload(page: Page, url: string, waitSelector: string) {
+  await page.goto(url, { timeout: 180000 }).catch(() => {});
+  await waitOrReload(page, waitSelector);
+}
+
+// Sesi backoffice bisa hilang di tengah test (redirect ke halaman login).
+// Kalau itu terjadi, login ulang dengan akun yang sama seperti setup. Return true jika login ulang dilakukan.
+async function relogBackofficeIfNeeded(page: Page): Promise<boolean> {
+  const loginPage = new BackofficeLoginPage(page);
+  const onLogin = await loginPage.usernameInput.isVisible().catch(() => false);
+  if (!onLogin) return false;
+
+  console.log("[Backoffice] Sesi habis (halaman login), login ulang...");
+  await loginPage.login(process.env.ADMIN_USER!, process.env.ADMIN_PASS!);
+  await page.locator("text=Dashboard").first().waitFor({ state: "visible", timeout: 30000 }).catch(() => {});
+  return true;
 }
 
 // ── Vehicle Data Verification ─────────────────────────────────────────────────
@@ -47,18 +72,16 @@ async function getVehicleField(label: string): Promise<string> {
     .locator("..")
     .locator("span.text-right")
     .first();
-  const visible = await valueSpan.isVisible({ timeout: 3000 }).catch(() => false);
+  const visible = await appears(valueSpan, 3000);
   return visible ? ((await valueSpan.textContent()) ?? "").trim() : "";
 }
 
 async function verifyVehicleDataInRoom(vehicle: CreatedVehicle, lotLabel: string, testInfo: TestInfo) {
   await step(`Verify vehicle data in auction room - ${lotLabel}`, async () => {
-    const plateVisible = await buyerPage
-      .locator("span.text-right")
-      .filter({ hasText: vehicle.licensePlate })
-      .first()
-      .isVisible({ timeout: 8000 })
-      .catch(() => false);
+    const plateVisible = await appears(
+      buyerPage.locator("span.text-right").filter({ hasText: vehicle.licensePlate }),
+      8000,
+    );
 
     if (!plateVisible) {
       console.log(`[Buyer] ⚠️  Plate "${vehicle.licensePlate}" not found in span.text-right — skipping data verification`);
@@ -93,7 +116,7 @@ async function verifyVehicleDataInRoom(vehicle: CreatedVehicle, lotLabel: string
 // ── Step 1: Login ─────────────────────────────────────────────────────────────
 
 When("conductor and buyer login in parallel", async ({ browser, $testInfo }) => {
-  test.setTimeout(600000);
+  test.setTimeout(900000);
   currentLotIndex = 0;
   conductorContext = await browser.newContext();
   buyerContext     = await browser.newContext();
@@ -144,14 +167,14 @@ Then("buyer should be on the auction lane page", async () => {
 When("conductor starts the auction", async ({ $testInfo }) => {
   await step("Conductor - Find auction card", async () => {
     let auctionCard;
-    if (createdAuctionName) {
-      auctionCard = conductorPage.locator("div.w-full.border.rounded-md").filter({ hasText: createdAuctionName }).first();
-      const found = await auctionCard.isVisible({ timeout: 5000 }).catch(() => false);
+    if (getAuctionName()) {
+      auctionCard = conductorPage.locator("div.w-full.border.rounded-md").filter({ hasText: getAuctionName() }).first();
+      const found = await appears(auctionCard, 5000);
       if (!found) {
-        console.log(`[Conductor] Auction "${createdAuctionName}" not found, using first card`);
+        console.log(`[Conductor] Auction "${getAuctionName()}" not found, using first card`);
         auctionCard = conductorPage.locator("div.w-full.border.rounded-md").first();
       } else {
-        console.log(`[Conductor] Found auction: "${createdAuctionName}"`);
+        console.log(`[Conductor] Found auction: "${getAuctionName()}"`);
       }
     } else {
       auctionCard = conductorPage.locator("div.w-full.border.rounded-md").first();
@@ -163,8 +186,8 @@ When("conductor starts the auction", async ({ $testInfo }) => {
   });
 
   await step("Conductor - Click Start Auction", async () => {
-    const auctionCard = createdAuctionName
-      ? conductorPage.locator("div.w-full.border.rounded-md").filter({ hasText: createdAuctionName }).first()
+    const auctionCard = getAuctionName()
+      ? conductorPage.locator("div.w-full.border.rounded-md").filter({ hasText: getAuctionName() }).first()
       : conductorPage.locator("div.w-full.border.rounded-md").first();
     const startBtn = auctionCard.locator('button:has-text("Start Auction")');
     await startBtn.waitFor({ state: "visible", timeout: 10000 });
@@ -192,7 +215,7 @@ When("buyer joins the auction", async ({ $testInfo }) => {
 
   await step("Buyer - Handle Terms and Conditions modal if shown", async () => {
     const termsModal = buyerPage.locator('text=Terms And Conditions').first();
-    const isTermsVisible = await termsModal.isVisible({ timeout: 3000 }).catch(() => false);
+    const isTermsVisible = await appears(termsModal, 3000);
     if (isTermsVisible) {
       console.log("[Buyer] Terms modal detected, accepting...");
       const checkbox = buyerPage.locator('input[type="checkbox"]').last();
@@ -209,15 +232,15 @@ When("buyer joins the auction", async ({ $testInfo }) => {
 
   await step("Buyer - Auction list: select lane then click Join Auction", async () => {
     await attachScreenshot($testInfo, buyerPage, "03 - Buyer Auction List");
-    console.log(`[Buyer] Looking for auction: "${createdAuctionName}"`);
+    console.log(`[Buyer] Looking for auction: "${getAuctionName()}"`);
 
     let checkbox;
-    if (createdAuctionName) {
-      const matchingRow = buyerPage.locator('div.w-full.flex.items-center').filter({ hasText: createdAuctionName }).first();
-      const rowVisible = await matchingRow.isVisible({ timeout: 3000 }).catch(() => false);
+    if (getAuctionName()) {
+      const matchingRow = buyerPage.locator('div.w-full.flex.items-center').filter({ hasText: getAuctionName() }).first();
+      const rowVisible = await appears(matchingRow, 3000);
       if (rowVisible) {
         checkbox = matchingRow.locator('input[name="selected_lane"]');
-        console.log(`[Buyer] Found matching row for: "${createdAuctionName}"`);
+        console.log(`[Buyer] Found matching row for: "${getAuctionName()}"`);
       }
     }
     if (!checkbox) {
@@ -251,7 +274,7 @@ When("buyer joins the auction", async ({ $testInfo }) => {
 async function doEnableBidding(testInfo: TestInfo) {
   await step("Conductor - Click Start Lane (if not already done)", async () => {
     const startLaneBtn = conductorPage.locator('button:has-text("Start Lane")');
-    const isVisible = await startLaneBtn.isVisible({ timeout: 8000 }).catch(() => false);
+    const isVisible = await appears(startLaneBtn, 8000);
     if (isVisible) {
       const isEnabled = await startLaneBtn.isEnabled().catch(() => false);
       if (isEnabled) {
@@ -359,7 +382,7 @@ When("conductor broadcasts a message", async ({ $testInfo }) => {
 When("buyer places a bid", async ({ $testInfo }) => {
   await step("Buyer - Click Interested (if not already bidding)", async () => {
     const interestedBtn = buyerPage.locator('button:has-text("Interested")');
-    const isInterested = await interestedBtn.isVisible({ timeout: 5000 }).catch(() => false);
+    const isInterested = await appears(interestedBtn, 5000);
 
     if (isInterested) {
       await expect(interestedBtn).toBeEnabled({ timeout: 15000 });
@@ -389,7 +412,7 @@ When("buyer places a bid", async ({ $testInfo }) => {
     console.log(`[Buyer] Offered +${BID_INCREMENT.toLocaleString("en-US")} → expected bid: ${currentBidPrice.toLocaleString("en-US")}`);
 
     const confirmModal = buyerPage.locator('text=Are you sure want to bid');
-    const hasModal = await confirmModal.isVisible({ timeout: 3000 }).catch(() => false);
+    const hasModal = await appears(confirmModal, 3000);
     if (hasModal) {
       console.log("[Buyer] Bid confirmation modal detected, clicking Bid...");
       const bidConfirmBtn = buyerPage.getByRole('button', { name: 'Bid', exact: true });
@@ -429,13 +452,8 @@ Then("bid price should be updated on both sides", async ({ $testInfo }) => {
     await buyerPage.waitForTimeout(1500);
     const expectedFormatted = currentBidPrice.toLocaleString("en-US");
 
-    const buyerHasBid = await buyerPage
-      .locator(`text=${expectedFormatted}`).first()
-      .isVisible({ timeout: 10000 }).catch(() => false);
-
-    const conductorHasBid = await conductorPage
-      .locator(`text=${expectedFormatted}`).first()
-      .isVisible({ timeout: 10000 }).catch(() => false);
+    const buyerHasBid = await appears(buyerPage.locator(`text=${expectedFormatted}`), 10000);
+    const conductorHasBid = await appears(conductorPage.locator(`text=${expectedFormatted}`), 10000);
 
     expect(buyerHasBid,     `[Bid Price] "${expectedFormatted}" tidak tampil di buyer`).toBe(true);
     expect(conductorHasBid, `[Bid Price] "${expectedFormatted}" tidak tampil di conductor`).toBe(true);
@@ -482,7 +500,7 @@ Then("conductor clicks unsold", async ({ $testInfo }) => {
 
   await step("Conductor - Handle Unsold modal and click Continue", async () => {
     const unsoldModal = conductorPage.locator('text=The auction winner is');
-    const hasModal = await unsoldModal.isVisible({ timeout: 5000 }).catch(() => false);
+    const hasModal = await appears(unsoldModal, 5000);
     if (hasModal) {
       const continueBtn = conductorPage.getByRole("button", { name: "Continue", exact: true });
       await continueBtn.waitFor({ state: "visible", timeout: 5000 });
@@ -507,7 +525,7 @@ Then("conductor clicks sold", async ({ $testInfo }) => {
 
   await step("Conductor - Handle Sold modal and click Continue", async () => {
     const continueBtn = conductorPage.getByRole("button", { name: "Continue", exact: true });
-    const hasModal = await continueBtn.isVisible({ timeout: 5000 }).catch(() => false);
+    const hasModal = await appears(continueBtn, 5000);
     if (hasModal) {
       await continueBtn.click();
       await conductorPage.waitForTimeout(1000);
@@ -537,29 +555,83 @@ When("backoffice resets sold vehicle", async ({ page, $testInfo }) => {
   const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
 
   await step("Backoffice - Cancel payment for Z555AUT", async () => {
-    await gotoWithReload(page, `${baseUrl}/en/register-payment/payment`, 'input[wire\\:model\\.defer="filter.search"]');
+    const paymentUrl = `${baseUrl}/en/register-payment/payment`;
+    const searchSelector = 'input[wire\\:model\\.defer="filter.search"]';
+    let detailPage: Page | null = null;
 
-    // Search Z555AUT
-    await page.locator('input[wire\\:model\\.defer="filter.search"]').fill("Z555AUT");
-    await page.locator('button:has-text("Search")').first().click();
-    await page.waitForTimeout(2000);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await gotoWithReload(page, paymentUrl, searchSelector);
+      if (await relogBackofficeIfNeeded(page)) {
+        await gotoWithReload(page, paymentUrl, searchSelector);
+      }
 
-    // Dblclick first unpaid row → open detail in new tab
-    const [detailPage] = await Promise.all([
-      page.waitForEvent("popup"),
-      page.locator("tr").filter({ hasText: "unpaid" }).first().locator("td.clickable-row").first().dblclick(),
-    ]);
-    await detailPage.waitForLoadState("domcontentloaded");
-    console.log("[Backoffice] Opened payment detail");
+      const searchInput = page.locator(searchSelector);
+      const hasInput = await appears(searchInput, 10000);
+      if (!hasInput) {
+        console.log(`[Payment] Attempt ${attempt}/3 — search input not found, retrying...`);
+        continue;
+      }
 
-    // Click X button (Cancel Unit)
-    await detailPage.locator("button.btn-danger.btn-sm").first().click();
+      await searchInput.fill("Z555AUT");
+      await page.locator('button:has-text("Search")').first().click();
+      await page.waitForTimeout(3000);
 
-    // Wait for modal to be fully visible before clicking Yes
-    await detailPage.locator("#modal_cancel").waitFor({ state: "visible", timeout: 5000 });
-    await detailPage.locator("#modal_cancel button[type='submit']").click();
-    await detailPage.waitForLoadState("domcontentloaded");
-    await detailPage.waitForTimeout(3000);
+      const unpaidRow = page.locator("tr").filter({ hasText: "unpaid" }).first();
+      const hasUnpaid = await appears(unpaidRow, 10000);
+      if (!hasUnpaid) {
+        console.log(`[Payment] Attempt ${attempt}/3 — no unpaid row found, retrying...`);
+        continue;
+      }
+
+      try {
+        const [popup] = await Promise.all([
+          page.waitForEvent("popup", { timeout: 15000 }),
+          unpaidRow.locator("td.clickable-row").first().dblclick(),
+        ]);
+        detailPage = popup;
+        await detailPage.waitForLoadState("domcontentloaded");
+        console.log("[Backoffice] Opened payment detail");
+        break;
+      } catch {
+        console.log(`[Payment] Attempt ${attempt}/3 — popup did not open, retrying...`);
+        detailPage = null;
+      }
+    }
+
+    if (!detailPage) {
+      throw new Error("Failed to open payment detail page after 3 attempts");
+    }
+
+    // Cancel Unit: sukses kalau baris Z555AUT berstatus "Canceled" (toast "Payment successfully Cancel").
+    // Jangan hanya menunggu waktu tetap: kalau backend lambat/error, request cancel bisa belum selesai
+    // dan menutup tab akan memutusnya sehingga payment tetap unpaid.
+    const canceledRow = detailPage.locator("tr").filter({ hasText: "Z555AUT" }).filter({ hasText: "Canceled" });
+    let cancelled = false;
+
+    for (let attempt = 1; attempt <= 3 && !cancelled; attempt++) {
+      if (attempt > 1) {
+        await detailPage.reload({ timeout: 60000 }).catch(() => {});
+        await detailPage.waitForLoadState("domcontentloaded");
+        if (await appears(canceledRow, 5000)) {
+          cancelled = true;
+          break;
+        }
+      }
+
+      // Click X button (Cancel Unit), lalu Yes di modal
+      await detailPage.locator("button.btn-danger.btn-sm").first().click();
+      await detailPage.locator("#modal_cancel").waitFor({ state: "visible", timeout: 5000 });
+      await detailPage.locator("#modal_cancel button[type='submit']").click();
+
+      cancelled = await appears(canceledRow, 30000);
+      if (!cancelled) {
+        console.log(`[Payment] Cancel attempt ${attempt}/3 — status belum "Canceled", retrying...`);
+      }
+    }
+
+    if (!cancelled) {
+      throw new Error("Payment Z555AUT gagal di-cancel setelah 3 attempts");
+    }
 
     console.log("[Backoffice] Payment for Z555AUT cancelled");
     await attachScreenshot($testInfo, detailPage, "100 - Backoffice Payment Cancelled");
@@ -567,19 +639,53 @@ When("backoffice resets sold vehicle", async ({ page, $testInfo }) => {
   });
 
   await step("Backoffice - Reset Z555AUT status to Un-Sold", async () => {
-    await gotoWithReload(page, `${baseUrl}/en/vehicle/car`, 'input[wire\\:model\\.defer="filter.search"]');
+    const vehicleUrl = `${baseUrl}/en/vehicle/car`;
+    const searchSelector = 'input[wire\\:model\\.defer="filter.search"]';
+    let vehicleDetail: Page | null = null;
 
-    // Search Z555AUT
-    await page.locator('input[wire\\:model\\.defer="filter.search"]').fill("Z555AUT");
-    await page.locator('button.btn-info').click();
-    await page.waitForTimeout(2000);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await gotoWithReload(page, vehicleUrl, searchSelector);
+      if (await relogBackofficeIfNeeded(page)) {
+        await gotoWithReload(page, vehicleUrl, searchSelector);
+      }
 
-    // Dblclick row → open vehicle detail in new tab
-    const [vehicleDetail] = await Promise.all([
-      page.waitForEvent("popup"),
-      page.locator("tr[ondblclick]").first().dblclick(),
-    ]);
-    await vehicleDetail.waitForLoadState("domcontentloaded");
+      const searchInput = page.locator(searchSelector);
+      const hasInput = await appears(searchInput, 10000);
+      if (!hasInput) {
+        console.log(`[Vehicle] Attempt ${attempt}/3 — search input not found, retrying...`);
+        continue;
+      }
+
+      await searchInput.fill("Z555AUT");
+      await page.locator('button.btn-info').click();
+      await page.waitForTimeout(2000);
+
+      const vehicleRow = page.locator("tr[ondblclick]").first();
+      const hasRow = await appears(vehicleRow, 10000);
+      if (!hasRow) {
+        console.log(`[Vehicle] Attempt ${attempt}/3 — vehicle row not found, retrying...`);
+        continue;
+      }
+
+      try {
+        const [popup] = await Promise.all([
+          page.waitForEvent("popup", { timeout: 15000 }),
+          vehicleRow.dblclick(),
+        ]);
+        vehicleDetail = popup;
+        await waitOrReload(vehicleDetail, 'a.btn.btn-primary:has-text("Edit")');
+        console.log("[Backoffice] Opened vehicle detail popup");
+        break;
+      } catch {
+        console.log(`[Vehicle] Attempt ${attempt}/3 — popup did not open, retrying...`);
+        await vehicleDetail?.close().catch(() => {});
+        vehicleDetail = null;
+      }
+    }
+
+    if (!vehicleDetail) {
+      throw new Error("Failed to open vehicle detail page after 3 attempts");
+    }
 
     // Click Edit link
     await vehicleDetail.locator('a.btn.btn-primary:has-text("Edit")').click();

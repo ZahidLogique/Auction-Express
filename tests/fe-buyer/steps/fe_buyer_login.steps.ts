@@ -1,8 +1,8 @@
 import { createBdd } from "playwright-bdd";
-import { expect } from "@playwright/test";
+import { expect, test } from "../../../fixtures/base";
 import { AuctionLoginPage } from "../../../pages/fe-auction/FELoginPage";
 
-const { Given, When, Then } = createBdd();
+const { Given, When, Then } = createBdd(test);
 
 // ─── Given ───────────────────────────────────────────────────────────────────
 
