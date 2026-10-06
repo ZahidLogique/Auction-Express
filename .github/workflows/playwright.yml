@@ -7,10 +7,16 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Run baru di branch/PR yang sama membatalkan run lama yang masih jalan
+concurrency:
+  group: playwright-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Batas total job. Run sehat ±8 menit E2E + ±4 menit setup (install, browser)
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -50,6 +56,8 @@ jobs:
         run: npx bddgen
 
       - name: Run E2E tests
+        # Dihentikan paksa kalau lewat batas; step upload di bawah tetap jalan (if: always())
+        timeout-minutes: 15
         run: npx playwright test --project=e2e
         env:
           PLAYWRIGHT_HEADLESS: true
