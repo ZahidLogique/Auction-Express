@@ -206,7 +206,9 @@ Then("the sale result should be shown on both sides", async ({ $testInfo }) => {
     // Pemenang harus penawar yang benar-benar menawar (kode member dari riwayat conductor), bukan sekadar "ada pemenang"
     const memberCode = await getBidderCode();
     expect(memberCode, "Kode member penawar tidak ditemukan di riwayat conductor").toMatch(/^AX\d+$/);
-    await expect(conductorDialog, "Pemenang di dialog conductor harus penawar").toContainText(`The auction winner is ${memberCode}`);
+    // Teks antar-elemen digabung tanpa spasi ("winner isAX1000947Selling Sheet"): izinkan spasi opsional
+    await expect(conductorDialog, "Pemenang di dialog conductor harus penawar")
+      .toContainText(new RegExp(`The auction winner is\\s*${memberCode}`));
     expect(await getBuyerName(), "Nama buyer yang login tidak terbaca di header").not.toBe("");
 
     const buyerDialog = buyerPage.getByRole("dialog").filter({ hasText: "You are the winner" });

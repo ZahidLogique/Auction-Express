@@ -106,7 +106,7 @@ When("I assign the vehicles to the auction session", async ({ page, $testInfo })
 
   await step(`Open auction detail - ${createdAuctionName}`, async () => {
     const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
-    await page.goto(`${baseUrl}/en/auction-management/auction`);
+    await page.goto(`${baseUrl}/en/auction-management/auction`, { timeout: 60000 });
     await page.waitForLoadState("domcontentloaded");
     await page.locator("#jadwallelang tbody").waitFor({ state: "visible", timeout: 15000 });
     await auctionPage.searchAuction(createdAuctionName);
@@ -170,7 +170,7 @@ When("I publish the auction session", async ({ page, $testInfo }) => {
 
   await step("Navigate to auction list for publish", async () => {
     const baseUrl = (process.env.BACKOFFICE_URL ?? "").replace(/\/$/, "");
-    await page.goto(`${baseUrl}/en/auction-management/auction`);
+    await page.goto(`${baseUrl}/en/auction-management/auction`, { timeout: 60000 });
     await page.waitForLoadState("domcontentloaded");
     await page.locator("#jadwallelang tbody").waitFor({ state: "visible", timeout: 15000 });
 
