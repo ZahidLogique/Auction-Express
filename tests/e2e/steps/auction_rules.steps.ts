@@ -120,6 +120,13 @@ Then("the price should be reset to the starting price", async ({ $testInfo }) =>
     await expect.poll(getConductorPrice, { timeout: 15000, message: "Current Price conductor kembali ke starting price" })
       .toBe(STARTING_PRICE);
     await expect(buyerPage.locator("text=You are not the leader >> visible=true").first()).toBeVisible({ timeout: 10000 });
+    // Setelah reset, buyer tidak boleh bisa menawar sampai Enable Bid diklik lagi dan buyer menekan Interested lagi
+    for (const increment of [2000, 5000]) {
+      await expect(buyerPage.locator(`button:has-text("${increment}"):visible`), `Tombol +${increment} tidak boleh ada setelah reset`)
+        .toHaveCount(0, { timeout: 10000 });
+    }
+    await expect(buyerPage.locator('button:has-text("Interested")').first(), "Interested harus nonaktif setelah reset")
+      .toBeDisabled({ timeout: 10000 });
     console.log(`[Verify] ✅ Price reset to ${formatPrice(STARTING_PRICE)}, buyer is not the leader`);
   });
 
@@ -247,6 +254,11 @@ Then("the sold lot should be listed with the final price", async ({ $testInfo })
     await expect(row).toContainText(/(?<!Un-)Sold/, { timeout: 60000 });
     await expect(row, "Harga akhir di tabel lot").toContainText(`${formatPrice(RESERVED_PRICE)} THB`);
     await expect(row, "Auction Winner di tabel lot harus buyer yang login").toContainText(await getBuyerName());
+    // Lot yang tidak terjual harus tetap Un-Sold dan tanpa pemenang
+    for (const lot of createdVehicles.slice(0, getCurrentLotIndex())) {
+      await expect(conductorPage.locator("table tbody tr").filter({ hasText: lot.licensePlate }).first(), `${lot.licensePlate} harus Un-Sold`)
+        .toContainText("Un-Sold", { timeout: 15000 });
+    }
     await attachScreenshot($testInfo, conductorPage, "09c - Conductor Lot Table After Sold");
   });
 });
@@ -292,6 +304,10 @@ Then("the payment should be created for the sold vehicle", async ({ page, $testI
     const match = rowText.match(new RegExp(`${plate}\\s+([\\d,]+\\.\\d{2})\\s+([\\d,]+\\.\\d{2})\\s+([\\d,]+\\.\\d{2})\\s+([\\d,]+\\.\\d{2})`));
     expect(match, `Format baris payment tidak dikenali: ${rowText}`).not.toBeNull();
     const [soldTotal, fee, total, remaining] = match!.slice(1, 5).map((v) => Number(v.replace(/,/g, "")));
+
+    // Baris payment memuat nomor lot kendaraan ini (kolom lotNo)
+    const lotNumber = createdVehicles[getCurrentLotIndex()].lotNumber;
+    if (lotNumber) expect(rowText, `Baris payment harus memuat lot ${lotNumber}`).toContain(lotNumber);
 
     expect(soldTotal, "Sold Price Total minimal sebesar harga akhir").toBeGreaterThanOrEqual(RESERVED_PRICE);
     expect(Math.abs(total - (soldTotal + fee)), "Total = Sold Price Total + Fee").toBeLessThan(0.01);

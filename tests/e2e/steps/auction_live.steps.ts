@@ -166,6 +166,13 @@ When("conductor and buyer login in parallel", async ({ browser, $testInfo }) => 
   });
 
   await step("Verify sessions logged in", async () => {
+    // Identitas sesi: buyer menampilkan nama di header ("Hello, <nama>"), conductor menampilkan Logout
+    await expect.poll(async () => (await buyerPage.locator("body").innerText()).match(/Hello,\s*(\S+)/)?.[1] ?? "", {
+      timeout: 15000,
+      message: "Header buyer harus menampilkan nama pengguna (Hello, <nama>)",
+    }).not.toBe("");
+    await expect(conductorPage.getByText("Logout").first(), "Conductor harus berada dalam sesi login").toBeVisible({ timeout: 10000 });
+
     await Promise.all([
       attachScreenshot($testInfo, conductorPage, "01 - Conductor After Login"),
       attachScreenshot($testInfo, buyerPage,     "01 - Buyer After Login"),
@@ -515,6 +522,9 @@ export async function verifyBidPrice(expectedPrice: number, $testInfo: TestInfo)
       .toBe(expectedPrice);
     await expect.poll(getConductorPrice, { timeout: 15000, message: `[Bid Price] Current Price di conductor harus ${expectedFormatted}` })
       .toBe(expectedPrice);
+    // Buyer adalah satu-satunya penawar di semua lot, jadi harus berstatus leader
+    await expect(buyerPage.locator("text=You are the leader >> visible=true").first(), "[Bid Price] buyer harus berstatus leader")
+      .toBeVisible({ timeout: 10000 });
 
     console.log(`[Verify] ✅ Bid price "${expectedFormatted}" confirmed on both sides`);
     await Promise.all([
@@ -530,11 +540,16 @@ Then("bid price should be updated on both sides", async ({ $testInfo }) => {
 
 // ── Step 5: Countdown & Unsold ────────────────────────────────────────────────
 
+// Auction test dibuat dengan Start Timer = Reset Timer = 10 detik (helpers/random.ts generateAuction)
+const COUNTDOWN_MIN_MS = 7_000;
+let countdownStartedAt = 0;
+
 When("conductor starts countdown", async ({ $testInfo }) => {
   await step("Conductor - Click Start Countdown", async () => {
     const startCountdownBtn = conductorPage.locator('button:has-text("Start Countdown")');
     await startCountdownBtn.waitFor({ state: "visible", timeout: 15000 });
     await expect(startCountdownBtn).toBeEnabled({ timeout: 10000 });
+    countdownStartedAt = Date.now();
     await startCountdownBtn.click();
     console.log("[Conductor] Start Countdown clicked");
     await attachScreenshot($testInfo, conductorPage, "06 - Conductor Start Countdown");
@@ -544,7 +559,10 @@ When("conductor starts countdown", async ({ $testInfo }) => {
     console.log("[Conductor] Waiting for countdown to finish...");
     const soldBtn = conductorPage.getByRole('button', { name: 'Sold', exact: true });
     await expect(soldBtn).toBeEnabled({ timeout: 60000 });
-    console.log("[Conductor] Countdown finished, Sold button is now enabled");
+    // Sold/Unsold baru boleh aktif SETELAH countdown (10 detik) berjalan, bukan langsung
+    const elapsed = Date.now() - countdownStartedAt;
+    expect(elapsed, `Sold aktif setelah ${elapsed} ms: countdown 10 detik seharusnya berjalan dulu`).toBeGreaterThanOrEqual(COUNTDOWN_MIN_MS);
+    console.log(`[Conductor] Countdown finished after ${Math.round(elapsed / 1000)}s, Sold button is now enabled`);
     await attachScreenshot($testInfo, conductorPage, "06b - Conductor After Countdown");
   });
 });
@@ -596,8 +614,9 @@ When("conductor ends the auction", async ({ $testInfo }) => {
     await endLaneBtn.waitFor({ state: "visible", timeout: 15000 });
     await expect(endLaneBtn).toBeEnabled({ timeout: 10000 });
     await endLaneBtn.click();
-    await conductorPage.waitForTimeout(2000);
-    console.log("[Conductor] Clicked End Lane");
+    await expect(conductorPage.getByText("Auction Finished").first(), "Setelah End Lane harus muncul 'Auction Finished'")
+      .toBeVisible({ timeout: 30000 });
+    console.log("[Conductor] Clicked End Lane, Auction Finished");
     await attachScreenshot($testInfo, conductorPage, "99 - Conductor After End Lane");
   });
 });
@@ -704,6 +723,7 @@ When("backoffice resets sold vehicle", async ({ page, $testInfo }) => {
     const vehicleUrl = `${baseUrl}/en/vehicle/car`;
     const searchSelector = 'input[wire\\:model\\.defer="filter.search"]';
     let vehicleDetail: Page | null = null;
+    let lastPreResetStatus = "";
 
     for (let attempt = 1; attempt <= 3; attempt++) {
       await gotoWithReload(page, vehicleUrl, searchSelector);
@@ -729,6 +749,14 @@ When("backoffice resets sold vehicle", async ({ page, $testInfo }) => {
         continue;
       }
 
+      // Sebelum reset, payment sudah Canceled sehingga status vehicle harus "Sold Done" (teramati di staging).
+      // Kalau belum, daftar mungkin belum diperbarui: ulangi dari awal alih-alih mengubah status yang salah.
+      lastPreResetStatus = (await vehicleRow.innerText()).replace(/\s+/g, " ");
+      if (!/Sold/.test(lastPreResetStatus) || !/Done/.test(lastPreResetStatus)) {
+        console.log(`[Vehicle] Attempt ${attempt}/3 — status sebelum reset belum "Sold Done": ${lastPreResetStatus}`);
+        continue;
+      }
+
       try {
         const [popup] = await Promise.all([
           page.waitForEvent("popup", { timeout: 15000 }),
@@ -746,7 +774,7 @@ When("backoffice resets sold vehicle", async ({ page, $testInfo }) => {
     }
 
     if (!vehicleDetail) {
-      throw new Error("Failed to open vehicle detail page after 3 attempts");
+      throw new Error(`Failed to open vehicle detail page after 3 attempts (status vehicle terakhir: "${lastPreResetStatus || "tidak terbaca"}")`);
     }
 
     // Click Edit link
