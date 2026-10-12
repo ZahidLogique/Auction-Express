@@ -724,8 +724,29 @@ When("backoffice resets sold vehicle", async ({ page, $testInfo }) => {
     const searchSelector = 'input[wire\\:model\\.defer="filter.search"]';
     let vehicleDetail: Page | null = null;
     let lastPreResetStatus = "";
+    let onEditPage = false;
 
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    // Jalur utama: buka halaman edit langsung lewat id vehicle (tanpa daftar vehicle yang lambat dan sering error).
+    // Jalur lama lewat daftar + pencarian tetap jadi cadangan bila id tidak tersedia atau halamannya gagal.
+    const inventoryId = createdVehicles.find((v) => v.licensePlate === "Z555AUT")?.inventoryId;
+    if (inventoryId) {
+      const editPage = await page.context().newPage();
+      try {
+        await editPage.goto(`${baseUrl}/en/vehicle/car/edit/${inventoryId}`, { timeout: 60000 });
+        const statusBox = editPage.locator("#select2-auction_status_select-container");
+        if (await appears(statusBox, 20000)) {
+          lastPreResetStatus = (await statusBox.innerText()).trim();
+          vehicleDetail = editPage;
+          onEditPage = true;
+          console.log(`[Backoffice] Opened vehicle edit page directly (status: ${lastPreResetStatus})`);
+        }
+      } catch {
+        console.log("[Vehicle] Halaman edit langsung gagal dibuka, memakai daftar vehicle...");
+      }
+      if (!onEditPage) await editPage.close().catch(() => {});
+    }
+
+    for (let attempt = 1; attempt <= 3 && !vehicleDetail; attempt++) {
       await gotoWithReload(page, vehicleUrl, searchSelector);
       if (await relogBackofficeIfNeeded(page)) {
         await gotoWithReload(page, vehicleUrl, searchSelector);
@@ -777,10 +798,12 @@ When("backoffice resets sold vehicle", async ({ page, $testInfo }) => {
       throw new Error(`Failed to open vehicle detail page after 3 attempts (status vehicle terakhir: "${lastPreResetStatus || "tidak terbaca"}")`);
     }
 
-    // Click Edit link
-    await vehicleDetail.locator('a.btn.btn-primary:has-text("Edit")').click();
-    await vehicleDetail.waitForLoadState("domcontentloaded");
-    console.log("[Backoffice] Opened vehicle edit page");
+    // Click Edit link (jalur langsung sudah berada di halaman edit)
+    if (!onEditPage) {
+      await vehicleDetail.locator('a.btn.btn-primary:has-text("Edit")').click();
+      await vehicleDetail.waitForLoadState("domcontentloaded");
+      console.log("[Backoffice] Opened vehicle edit page");
+    }
 
     // Change auction_status via Select2: click rendered value → select Un-Sold
     await vehicleDetail.locator('#select2-auction_status_select-container').click();
@@ -803,6 +826,30 @@ When("backoffice resets sold vehicle", async ({ page, $testInfo }) => {
     const vehicleUrl = `${baseUrl}/en/vehicle/car`;
     const searchSelector = 'input[wire\\:model\\.defer="filter.search"]';
     let rowText = "";
+
+    // Jalur utama: baca status dari select di halaman edit langsung (tanpa daftar vehicle)
+    const inventoryId = createdVehicles.find((v) => v.licensePlate === "Z555AUT")?.inventoryId;
+    if (inventoryId) {
+      const editPage = await page.context().newPage();
+      let status = "";
+      try {
+        await editPage.goto(`${baseUrl}/en/vehicle/car/edit/${inventoryId}`, { timeout: 60000 });
+        const statusBox = editPage.locator("#select2-auction_status_select-container");
+        if (await appears(statusBox, 20000)) {
+          status = (await statusBox.innerText()).trim();
+          await attachScreenshot($testInfo, editPage, "102 - Backoffice Vehicle Status Unsold");
+        }
+      } catch {
+        console.log("[Vehicle] Verifikasi lewat halaman edit gagal, memakai daftar vehicle...");
+      } finally {
+        await editPage.close().catch(() => {});
+      }
+      if (status) {
+        expect(status, "Status Z555AUT di halaman edit setelah reset harus Un-Sold").toBe("Un-Sold");
+        console.log("[Backoffice] ✅ Z555AUT status verified on edit page: Un-Sold");
+        return;
+      }
+    }
 
     for (let attempt = 1; attempt <= 3 && !rowText; attempt++) {
       await gotoWithReload(page, vehicleUrl, searchSelector);

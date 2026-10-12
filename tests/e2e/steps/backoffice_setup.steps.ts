@@ -16,6 +16,7 @@ export interface CreatedVehicle {
   province:     string;
   title?:       string;   // judul di room (merek + model)
   lotNumber?:   string;   // nomor lot yang diberikan sistem sesuai urutan assign
+  inventoryId?: string;   // id vehicle di staging: membuka /vehicle/car/edit/<id> langsung tanpa daftar vehicle yang lambat
   seller?:      string;
   brand?:       string;
   groupType?:   string;
@@ -35,7 +36,7 @@ const REGRESSION_VEHICLES: CreatedVehicle[] = [
   { licensePlate: "Z222AUT", province: "Bangkok", title: "Daihatsu Grand Move", lotNumber: "1002" },
   { licensePlate: "Z333AUT", province: "Bangkok", title: "Jeep Cherokee",       lotNumber: "1003" },
   { licensePlate: "Z444AUT", province: "Bangkok", title: "Ferrari 296 GTS",     lotNumber: "1004" },
-  { licensePlate: "Z555AUT", province: "Bangkok", title: "Toyota Alphard",      lotNumber: "1005" },
+  { licensePlate: "Z555AUT", province: "Bangkok", title: "Toyota Alphard",      lotNumber: "1005", inventoryId: "7f7ba57f-be4e-45cd-a3e2-e936ef0ea96a" },
 ];
 
 export const createdVehicles: CreatedVehicle[] = [...REGRESSION_VEHICLES];
