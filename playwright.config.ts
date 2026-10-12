@@ -79,6 +79,14 @@ export default defineConfig({
       testMatch: "conductor.setup.ts",
       use: { ...devices["Desktop Chrome"] },
     },
+    // Selesaikan auction test yang menggantung dari run gagal (menahan vehicle) sebelum E2E.
+    {
+      name: "setup-cleanup",
+      testDir: "./tests/setup",
+      testMatch: "cleanup.setup.ts",
+      use: { ...devices["Desktop Chrome"], storageState: ".auth/conductor.json" },
+      dependencies: ["setup-conductor", "setup-backoffice"],
+    },
 
     // ── Backoffice ─────────────────────────────────────────────────────────────
     {
@@ -107,7 +115,7 @@ export default defineConfig({
         baseURL: process.env.BACKOFFICE_URL,
         storageState: ".auth/backoffice.json",
       },
-      dependencies: ["setup-backoffice"],
+      dependencies: ["setup-backoffice", "setup-cleanup"],
     },
   ],
 });
