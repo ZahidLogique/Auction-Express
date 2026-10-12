@@ -13,7 +13,7 @@ import { createdVehicles, type CreatedVehicle } from "./backoffice_setup.steps";
 const { When, Then } = createBdd(test);
 
 // Nama auction ditulis oleh 01_backoffice_setup lewat .test-state.json
-function getAuctionName(): string {
+export function getAuctionName(): string {
   return (loadState().auctionName as string | undefined) ?? "";
 }
 
@@ -24,12 +24,15 @@ let buyerContext: BrowserContext;
 
 let currentLotIndex = 0;
 
-const STARTING_PRICE  = 100_000;
-const RESERVED_PRICE  = 105_000;
+export const STARTING_PRICE = 100_000;
+export const RESERVED_PRICE = 105_000;
 const BID_INCREMENT   = 5_000;
 let   currentBidPrice = STARTING_PRICE;
 
-async function attachScreenshot(testInfo: TestInfo, page: Page, label: string) {
+// State lot/harga dipakai juga oleh auction_rules.steps.ts
+export function getCurrentLotIndex(): number { return currentLotIndex; }
+
+export async function attachScreenshot(testInfo: TestInfo, page: Page, label: string) {
   await attachStepScreenshot(testInfo, page, label);
 }
 
@@ -44,14 +47,14 @@ async function waitOrReload(page: Page, waitSelector: string) {
   }
 }
 
-async function gotoWithReload(page: Page, url: string, waitSelector: string) {
+export async function gotoWithReload(page: Page, url: string, waitSelector: string) {
   await page.goto(url, { timeout: 180000 }).catch(() => {});
   await waitOrReload(page, waitSelector);
 }
 
 // Sesi backoffice bisa hilang di tengah test (redirect ke halaman login).
 // Kalau itu terjadi, login ulang dengan akun yang sama seperti setup. Return true jika login ulang dilakukan.
-async function relogBackofficeIfNeeded(page: Page): Promise<boolean> {
+export async function relogBackofficeIfNeeded(page: Page): Promise<boolean> {
   const loginPage = new BackofficeLoginPage(page);
   const onLogin = await loginPage.usernameInput.isVisible().catch(() => false);
   if (!onLogin) return false;
@@ -365,7 +368,11 @@ When("conductor broadcasts a message", async ({ $testInfo }) => {
     await broadcastInput.waitFor({ state: "visible", timeout: 10000 });
     await broadcastInput.fill(" Test Broadcast ");
 
-    const updateBtn = conductorPage.locator('button:has-text("Update")').first();
+    // Ada 3 tombol "Update" di halaman (URL, broadcast, pesan ke auctioneer): .first() mengenai tombol URL,
+    // sehingga broadcast tidak pernah terkirim. Ambil tombol Update pertama SETELAH label "Broadcast Message".
+    const updateBtn = conductorPage.locator(
+      'xpath=//label[normalize-space()="Broadcast Message"]/following::button[normalize-space()="Update"][1]'
+    );
     await updateBtn.waitFor({ state: "visible", timeout: 5000 });
     await expect(updateBtn).toBeEnabled({ timeout: 5000 });
     await updateBtn.click();
@@ -378,7 +385,25 @@ When("conductor broadcasts a message", async ({ $testInfo }) => {
 
 // ── Step 4: Buyer Bid ─────────────────────────────────────────────────────────
 
-When("buyer places a bid", async ({ $testInfo }) => {
+// Kadang buyer tidak menerima push real-time dari server dan tetap menampilkan
+// "Please wait a moment. The auction hasn't started yet" padahal conductor sudah memulai lane.
+// Pengguna biasa me-reload halaman; lakukan hal yang sama (dengan peringatan di log, tidak diam-diam).
+async function ensureBuyerRoomLive() {
+  const notStarted = buyerPage.getByText(/hasn.t started yet/);
+  if (!(await appears(notStarted, 2000))) return;
+
+  const gone = await expect(notStarted).toHaveCount(0, { timeout: 20000 }).then(() => true).catch(() => false);
+  if (gone) return;
+
+  console.log("[Buyer] ⚠️ Update real-time tidak datang ('auction hasn't started yet'), reload halaman");
+  await buyerPage.reload({ timeout: 60000 }).catch(() => {});
+  await buyerPage.waitForLoadState("domcontentloaded");
+  await buyerPage.waitForTimeout(3000);
+}
+
+// Interested + Accept (buyer ikut bidding di lot aktif). Harga awal lot = STARTING_PRICE.
+export async function buyerJoinBidding($testInfo: TestInfo) {
+  await ensureBuyerRoomLive();
   await step("Buyer - Click Interested (if not already bidding)", async () => {
     const interestedBtn = buyerPage.locator('button:has-text("Interested")');
     const isInterested = await appears(interestedBtn, 5000);
@@ -400,15 +425,19 @@ When("buyer places a bid", async ({ $testInfo }) => {
     }
     await attachScreenshot($testInfo, buyerPage, "05 - Buyer Bid State");
   });
+  currentBidPrice = STARTING_PRICE;
+}
 
-  await step("Buyer - Offer +5000", async () => {
-    const increaseBtn = buyerPage.locator('button:has-text("5000")').first();
+// Tombol kenaikan di room buyer: 2000 atau 5000
+export async function buyerOffer(increment: number, $testInfo: TestInfo) {
+  await step(`Buyer - Offer +${increment}`, async () => {
+    const increaseBtn = buyerPage.locator(`button:has-text("${increment}")`).first();
     await increaseBtn.waitFor({ state: "visible", timeout: 30000 });
     await expect(increaseBtn).toBeEnabled({ timeout: 10000 });
     await increaseBtn.click();
     await buyerPage.waitForTimeout(1000);
-    currentBidPrice = STARTING_PRICE + BID_INCREMENT;
-    console.log(`[Buyer] Offered +${BID_INCREMENT.toLocaleString("en-US")} → expected bid: ${currentBidPrice.toLocaleString("en-US")}`);
+    currentBidPrice += increment;
+    console.log(`[Buyer] Offered +${increment.toLocaleString("en-US")} → expected bid: ${currentBidPrice.toLocaleString("en-US")}`);
 
     const confirmModal = buyerPage.locator('text=Are you sure want to bid');
     const hasModal = await appears(confirmModal, 3000);
@@ -420,8 +449,13 @@ When("buyer places a bid", async ({ $testInfo }) => {
       await buyerPage.waitForTimeout(1000);
       console.log("[Buyer] Bid confirmed via modal");
     }
-    await attachScreenshot($testInfo, buyerPage, "05c - Buyer After Offer +5000");
+    await attachScreenshot($testInfo, buyerPage, `05c - Buyer After Offer +${increment}`);
   });
+}
+
+When("buyer places a bid", async ({ $testInfo }) => {
+  await buyerJoinBidding($testInfo);
+  await buyerOffer(BID_INCREMENT, $testInfo);
 });
 
 When("buyer sends a message", async ({ $testInfo }) => {
@@ -446,10 +480,11 @@ When("buyer sends a message", async ({ $testInfo }) => {
   });
 });
 
-Then("bid price should be updated on both sides", async ({ $testInfo }) => {
+// Harga bid harus tampil di buyer dan conductor
+export async function verifyBidPrice(expectedPrice: number, $testInfo: TestInfo) {
   await step("Verify bid price updated on both sides", async () => {
     await buyerPage.waitForTimeout(1500);
-    const expectedFormatted = currentBidPrice.toLocaleString("en-US");
+    const expectedFormatted = expectedPrice.toLocaleString("en-US");
 
     const buyerHasBid = await appears(buyerPage.locator(`text=${expectedFormatted}`), 10000);
     const conductorHasBid = await appears(conductorPage.locator(`text=${expectedFormatted}`), 10000);
@@ -463,6 +498,10 @@ Then("bid price should be updated on both sides", async ({ $testInfo }) => {
       attachScreenshot($testInfo, buyerPage,     "05c - Buyer Bid Price Updated"),
     ]);
   });
+}
+
+Then("bid price should be updated on both sides", async ({ $testInfo }) => {
+  await verifyBidPrice(currentBidPrice, $testInfo);
 });
 
 // ── Step 5: Countdown & Unsold ────────────────────────────────────────────────
@@ -521,17 +560,8 @@ Then("conductor clicks sold", async ({ $testInfo }) => {
     console.log("[Conductor] Clicked Sold");
     await attachScreenshot($testInfo, conductorPage, "08 - Conductor After Sold");
   });
-
-  await step("Conductor - Handle Sold modal and click Continue", async () => {
-    const continueBtn = conductorPage.getByRole("button", { name: "Continue", exact: true });
-    const hasModal = await appears(continueBtn, 5000);
-    if (hasModal) {
-      await continueBtn.click();
-      await conductorPage.waitForTimeout(1000);
-      console.log("[Conductor] Sold modal closed via Continue");
-    }
-    await attachScreenshot($testInfo, conductorPage, "08b - Conductor Sold Modal Closed");
-  });
+  // Modal hasil Sold dibiarkan terbuka: diverifikasi lalu ditutup di step
+  // "the sale result should be shown on both sides" dan "conductor continues after the sale".
 });
 
 // ── Step 6: End Auction ───────────────────────────────────────────────────────
@@ -575,8 +605,17 @@ When("backoffice resets sold vehicle", async ({ page, $testInfo }) => {
       await page.locator('button:has-text("Search")').first().click();
       await page.waitForTimeout(3000);
 
-      const unpaidRow = page.locator("tr").filter({ hasText: "unpaid" }).first();
-      const hasUnpaid = await appears(unpaidRow, 10000);
+      let unpaidRow = page.locator("tr").filter({ hasText: "unpaid" }).first();
+      let hasUnpaid = await appears(unpaidRow, 10000);
+      if (!hasUnpaid) {
+        // Pencarian dengan plat kadang belum menemukan payment baru padahal barisnya sudah ada di daftar
+        // tanpa kata kunci. Kosongkan pencarian lalu cari berdasarkan nama auction.
+        await searchInput.fill("");
+        await page.locator('button:has-text("Search")').first().click();
+        await page.waitForTimeout(3000);
+        unpaidRow = page.locator("tr").filter({ hasText: getAuctionName() }).filter({ hasText: "unpaid" }).first();
+        hasUnpaid = await appears(unpaidRow, 10000);
+      }
       if (!hasUnpaid) {
         console.log(`[Payment] Attempt ${attempt}/3 — no unpaid row found, retrying...`);
         continue;

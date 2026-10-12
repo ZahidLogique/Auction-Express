@@ -15,8 +15,8 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # Batas total job. Run sehat ±8 menit E2E + ±4 menit setup (install, browser)
-    timeout-minutes: 20
+    # Batas total job. Run sehat ±12 menit E2E (dengan case bidding rules) + ±4 menit setup (install, browser)
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -57,7 +57,7 @@ jobs:
 
       - name: Run E2E tests
         # Dihentikan paksa kalau lewat batas; step upload di bawah tetap jalan (if: always())
-        timeout-minutes: 15
+        timeout-minutes: 25
         run: npx playwright test --project=e2e
         env:
           PLAYWRIGHT_HEADLESS: true
