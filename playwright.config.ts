@@ -43,7 +43,7 @@ const e2eTestDir = defineBddConfig({
 export default defineConfig({
   fullyParallel: process.env.TEST_SEQUENTIAL !== "true",
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: 0,
   workers: process.env.CI ? 1 : undefined,
   globalSetup: "./global-setup.ts",
   reporter: [
