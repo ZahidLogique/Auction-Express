@@ -525,6 +525,10 @@ export async function verifyBidPrice(expectedPrice: number, $testInfo: TestInfo)
     // Buyer adalah satu-satunya penawar di semua lot, jadi harus berstatus leader
     await expect(buyerPage.locator("text=You are the leader >> visible=true").first(), "[Bid Price] buyer harus berstatus leader")
       .toBeVisible({ timeout: 10000 });
+    // Bid harus tercatat di riwayat buyer ("105,000 THB 11:15:54 AM The last price you bid")
+    await buyerPage.locator('[role="tab"]:has-text("Bidding History")').click();
+    await expect(buyerPage.locator(`text=${expectedFormatted} THB >> visible=true`).first(), `[Bid Price] ${expectedFormatted} THB harus ada di Bidding History buyer`)
+      .toBeVisible({ timeout: 10000 });
 
     console.log(`[Verify] ✅ Bid price "${expectedFormatted}" confirmed on both sides`);
     await Promise.all([
