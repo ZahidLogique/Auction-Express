@@ -80,16 +80,20 @@ async function getVehicleField(label: string): Promise<string> {
 
 async function verifyVehicleDataInRoom(vehicle: CreatedVehicle, lotLabel: string, testInfo: TestInfo) {
   await step(`Verify vehicle data in auction room - ${lotLabel}`, async () => {
-    const plateVisible = await appears(
-      buyerPage.locator("span.text-right").filter({ hasText: vehicle.licensePlate }),
-      8000,
-    );
+    const plateLocator = buyerPage.locator("span.text-right").filter({ hasText: vehicle.licensePlate });
+    let plateVisible = await appears(plateLocator, 20000);
 
     if (!plateVisible) {
-      console.log(`[Buyer] ⚠️  Plate "${vehicle.licensePlate}" not found in span.text-right — skipping data verification`);
-      await attachScreenshot(testInfo, buyerPage, `${lotLabel} - Buyer Room (plate not visible)`);
-      return;
+      // Push real-time kadang tidak sampai ke buyer; reload sekali seperti pengguna, lalu tetap WAJIB tampil.
+      console.log(`[Buyer] ⚠️ Plat "${vehicle.licensePlate}" tidak tampil dalam 20 detik, reload halaman buyer`);
+      await buyerPage.reload({ timeout: 60000 }).catch(() => {});
+      await buyerPage.waitForLoadState("domcontentloaded");
+      plateVisible = await appears(plateLocator, 20000);
     }
+    if (!plateVisible) {
+      await attachScreenshot(testInfo, buyerPage, `${lotLabel} - Buyer Room (plate not visible)`);
+    }
+    expect(plateVisible, `[${lotLabel}] Plat "${vehicle.licensePlate}" tidak tampil di room buyer`).toBe(true);
 
     const plateOnScreen   = await getVehicleField("Plate No");
     const provOnScreen    = await getVehicleField("Province");
@@ -109,6 +113,23 @@ async function verifyVehicleDataInRoom(vehicle: CreatedVehicle, lotLabel: string
     if (vehicle.color)        expect(colorOnScreen,   `[${lotLabel}] Color mismatch`).toContain(vehicle.color);
     if (vehicle.vin)          expect(vinOnScreen,     `[${lotLabel}] VIN mismatch`).toContain(vehicle.vin);
     if (vehicle.seller)       expect(sellerOnScreen,  `[${lotLabel}] Seller mismatch`).toContain(vehicle.seller);
+
+    // Judul lot di room buyer (merek + model)
+    if (vehicle.title) {
+      await expect(
+        buyerPage.locator("h1:visible").filter({ hasText: vehicle.title }).first(),
+        `[${lotLabel}] Judul kendaraan di buyer harus "${vehicle.title}"`,
+      ).toBeVisible({ timeout: 10000 });
+    }
+
+    // Tabel conductor: lot aktif berstatus Auctioning dengan nomor lot, plat, dan seller yang benar.
+    // Dilewati di Lot 1 karena saat buyer masuk, conductor belum menekan Start Lane.
+    if (lotLabel !== "Lot 1" && vehicle.lotNumber) {
+      const row = conductorPage.locator("table tbody tr").filter({ hasText: vehicle.licensePlate }).first();
+      await expect(row, `[${lotLabel}] Baris lot di conductor harus Auctioning`).toContainText("Auctioning", { timeout: 20000 });
+      await expect(row, `[${lotLabel}] Nomor lot di conductor`).toContainText(vehicle.lotNumber);
+      await expect(row, `[${lotLabel}] Seller di conductor`).toContainText("Logique QA");
+    }
 
     console.log(`[Buyer] ✅ Vehicle data verified for ${vehicle.licensePlate} (${lotLabel})`);
     await attachScreenshot(testInfo, buyerPage, `${lotLabel} - Vehicle Data Verified`);
@@ -167,30 +188,26 @@ Then("buyer should be on the auction lane page", async () => {
 // ── Step 2: Start & Join Auction ──────────────────────────────────────────────
 
 When("conductor starts the auction", async ({ $testInfo }) => {
+  // Wajib auction yang dibuat E2E-001. Tidak ada fallback ke kartu lain: menjalankan lelang
+  // yang salah (milik orang lain di staging) lebih berbahaya daripada gagal.
+  const requireAuctionName = (): string => {
+    const name = getAuctionName();
+    if (!name) throw new Error("Nama auction tidak ada di .test-state.json: jalankan E2E-001 (01_backoffice_setup) lebih dulu");
+    return name;
+  };
+
   await step("Conductor - Find auction card", async () => {
-    let auctionCard;
-    if (getAuctionName()) {
-      auctionCard = conductorPage.locator("div.w-full.border.rounded-md").filter({ hasText: getAuctionName() }).first();
-      const found = await appears(auctionCard, 5000);
-      if (!found) {
-        console.log(`[Conductor] Auction "${getAuctionName()}" not found, using first card`);
-        auctionCard = conductorPage.locator("div.w-full.border.rounded-md").first();
-      } else {
-        console.log(`[Conductor] Found auction: "${getAuctionName()}"`);
-      }
-    } else {
-      auctionCard = conductorPage.locator("div.w-full.border.rounded-md").first();
-    }
-    await auctionCard.waitFor({ state: "visible", timeout: 15000 });
-    const auctionName = await auctionCard.locator("h3").first().textContent().then((t) => t?.trim() ?? "");
-    console.log(`[Conductor] Starting auction: "${auctionName}"`);
+    const name = requireAuctionName();
+    const auctionCard = conductorPage.locator("div.w-full.border.rounded-md").filter({ hasText: name }).first();
+    await expect(auctionCard, `Auction "${name}" tidak ditemukan di daftar conductor`).toBeVisible({ timeout: 20000 });
+    const shownName = await auctionCard.locator("h3").first().textContent().then((t) => t?.trim() ?? "");
+    expect(shownName, "Nama auction di kartu conductor").toBe(name);
+    console.log(`[Conductor] Found auction: "${name}"`);
     await attachScreenshot($testInfo, conductorPage, "02 - Conductor Auction List");
   });
 
   await step("Conductor - Click Start Auction", async () => {
-    const auctionCard = getAuctionName()
-      ? conductorPage.locator("div.w-full.border.rounded-md").filter({ hasText: getAuctionName() }).first()
-      : conductorPage.locator("div.w-full.border.rounded-md").first();
+    const auctionCard = conductorPage.locator("div.w-full.border.rounded-md").filter({ hasText: requireAuctionName() }).first();
     const startBtn = auctionCard.locator('button:has-text("Start Auction")');
     await startBtn.waitFor({ state: "visible", timeout: 10000 });
     await startBtn.click();
@@ -234,21 +251,15 @@ When("buyer joins the auction", async ({ $testInfo }) => {
 
   await step("Buyer - Auction list: select lane then click Join Auction", async () => {
     await attachScreenshot($testInfo, buyerPage, "03 - Buyer Auction List");
-    console.log(`[Buyer] Looking for auction: "${getAuctionName()}"`);
+    const name = getAuctionName();
+    if (!name) throw new Error("Nama auction tidak ada di .test-state.json: jalankan E2E-001 (01_backoffice_setup) lebih dulu");
+    console.log(`[Buyer] Looking for auction: "${name}"`);
 
-    let checkbox;
-    if (getAuctionName()) {
-      const matchingRow = buyerPage.locator('div.w-full.flex.items-center').filter({ hasText: getAuctionName() }).first();
-      const rowVisible = await appears(matchingRow, 3000);
-      if (rowVisible) {
-        checkbox = matchingRow.locator('input[name="selected_lane"]');
-        console.log(`[Buyer] Found matching row for: "${getAuctionName()}"`);
-      }
-    }
-    if (!checkbox) {
-      console.log("[Buyer] Auction name not matched, using first row as fallback");
-      checkbox = buyerPage.locator('input[name="selected_lane"]').first();
-    }
+    // Tidak ada fallback ke baris pertama: buyer harus join auction yang dibuat E2E-001.
+    const matchingRow = buyerPage.locator('div.w-full.flex.items-center').filter({ hasText: name }).first();
+    await expect(matchingRow, `Auction "${name}" tidak ditemukan di daftar lane buyer`).toBeVisible({ timeout: 20000 });
+    console.log(`[Buyer] Found matching row for: "${name}"`);
+    const checkbox = matchingRow.locator('input[name="selected_lane"]');
 
     await checkbox.waitFor({ state: "visible", timeout: 10000 });
     await checkbox.click({ force: true });
@@ -263,6 +274,7 @@ When("buyer joins the auction", async ({ $testInfo }) => {
   });
 
   await step("Buyer - Verify inside auction room", async () => {
+    await expect(buyerPage, "Buyer harus berada di halaman room auction").toHaveURL(/\/auction\/detail/, { timeout: 30000 });
     await attachScreenshot($testInfo, buyerPage, "03 - Buyer Inside Auction Room");
   });
 
@@ -480,17 +492,29 @@ When("buyer sends a message", async ({ $testInfo }) => {
   });
 });
 
-// Harga bid harus tampil di buyer dan conductor
+// Harga AKTIF lot, dibaca terstruktur (bukan sekadar teks angka yang ada di mana saja, misalnya riwayat bid).
+// Buyer: panel harga "00:10.000 100,000 THB ...". Conductor: label "Current Price" lalu angkanya.
+export async function getBuyerPrice(): Promise<number> {
+  const text = await buyerPage.locator("body").innerText();
+  const match = text.match(/\d{2}:\d{2}\.\d{3}\s+([\d,]+)\s*THB/);
+  return match ? Number(match[1].replace(/,/g, "")) : NaN;
+}
+
+export async function getConductorPrice(): Promise<number> {
+  const text = await conductorPage.locator("body").innerText();
+  const match = text.match(/Current Price\s*([\d,]+)/i);
+  return match ? Number(match[1].replace(/,/g, "")) : NaN;
+}
+
+// Harga aktif harus sama persis dengan yang diharapkan di buyer DAN conductor
 export async function verifyBidPrice(expectedPrice: number, $testInfo: TestInfo) {
   await step("Verify bid price updated on both sides", async () => {
-    await buyerPage.waitForTimeout(1500);
     const expectedFormatted = expectedPrice.toLocaleString("en-US");
 
-    const buyerHasBid = await appears(buyerPage.locator(`text=${expectedFormatted}`), 10000);
-    const conductorHasBid = await appears(conductorPage.locator(`text=${expectedFormatted}`), 10000);
-
-    expect(buyerHasBid,     `[Bid Price] "${expectedFormatted}" tidak tampil di buyer`).toBe(true);
-    expect(conductorHasBid, `[Bid Price] "${expectedFormatted}" tidak tampil di conductor`).toBe(true);
+    await expect.poll(getBuyerPrice, { timeout: 15000, message: `[Bid Price] harga aktif di buyer harus ${expectedFormatted}` })
+      .toBe(expectedPrice);
+    await expect.poll(getConductorPrice, { timeout: 15000, message: `[Bid Price] Current Price di conductor harus ${expectedFormatted}` })
+      .toBe(expectedPrice);
 
     console.log(`[Verify] ✅ Bid price "${expectedFormatted}" confirmed on both sides`);
     await Promise.all([
@@ -744,6 +768,32 @@ When("backoffice resets sold vehicle", async ({ page, $testInfo }) => {
     console.log("[Backoffice] Z555AUT status reset to Un-Sold");
     await attachScreenshot($testInfo, vehicleDetail, "101 - Backoffice Vehicle Status Reset");
     await vehicleDetail.close();
+  });
+
+  // Save tidak otomatis berarti berhasil (backend sering error): baca ulang status dari daftar vehicle.
+  await step("Backoffice - Verify Z555AUT status is Unsold", async () => {
+    const vehicleUrl = `${baseUrl}/en/vehicle/car`;
+    const searchSelector = 'input[wire\\:model\\.defer="filter.search"]';
+    let rowText = "";
+
+    for (let attempt = 1; attempt <= 3 && !rowText; attempt++) {
+      await gotoWithReload(page, vehicleUrl, searchSelector);
+      if (await relogBackofficeIfNeeded(page)) await gotoWithReload(page, vehicleUrl, searchSelector);
+      if (!(await appears(page.locator(searchSelector), 10000))) {
+        console.log(`[Vehicle] Verifikasi status attempt ${attempt}/3 — kolom search tidak tampil, mengulang...`);
+        continue;
+      }
+      await page.locator(searchSelector).fill("Z555AUT");
+      await page.locator("button.btn-info").click();
+      const row = page.locator("tr[ondblclick]").filter({ hasText: "Z555AUT" }).first();
+      if (await appears(row, 15000)) rowText = (await row.innerText()).replace(/\s+/g, " ");
+    }
+
+    expect(rowText, "Baris Z555AUT di daftar vehicle tidak terbaca setelah reset").not.toBe("");
+    expect(rowText, "Status Z555AUT setelah reset harus Unsold").toMatch(/\bUnsold\b/);
+    expect(rowText, "Z555AUT tidak boleh masih berstatus Sold").not.toMatch(/Sold/);
+    console.log("[Backoffice] ✅ Z555AUT status verified: Unsold");
+    await attachScreenshot($testInfo, page, "102 - Backoffice Vehicle Status Unsold");
   });
 });
 

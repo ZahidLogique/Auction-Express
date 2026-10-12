@@ -10,6 +10,8 @@ import {
   buyerJoinBidding,
   buyerOffer,
   verifyBidPrice,
+  getBuyerPrice,
+  getConductorPrice,
   getAuctionName,
   getCurrentLotIndex,
   gotoWithReload,
@@ -29,11 +31,17 @@ const formatPrice = (n: number) => n.toLocaleString("en-US");
 // Teks status di room buyer selama harga belum mencapai reserved price
 const reservedLabel = () => buyerPage.locator("text=Not reached reserved price >> visible=true");
 
-// Harga aktif di panel buyer, formatnya "00:10.000 100,000 THB ..."
-async function getBuyerPrice(): Promise<number> {
+// Nama buyer yang login, dari header "Hello, <nama> Deposit : ..."
+async function getBuyerName(): Promise<string> {
   const text = await buyerPage.locator("body").innerText();
-  const match = text.match(/\d{2}:\d{2}\.\d{3}\s+([\d,]+)\s*THB/);
-  return match ? Number(match[1].replace(/,/g, "")) : NaN;
+  const match = text.match(/Hello,\s*([^\n]+)/);
+  return (match?.[1] ?? "").replace(/\s*Deposit.*$/i, "").trim();
+}
+
+// Kode member penawar, dari riwayat conductor ("AX1000947 make bid for 100,000 THB")
+async function getBidderCode(): Promise<string> {
+  const text = await conductorPage.locator("body").innerText();
+  return text.match(/(AX\d+)\s+[Mm]ake bid/)?.[1] ?? "";
 }
 
 // ── Broadcast & pesan ─────────────────────────────────────────────────────────
@@ -108,6 +116,8 @@ When("conductor resets the price", async ({ $testInfo }) => {
 Then("the price should be reset to the starting price", async ({ $testInfo }) => {
   await step("Verify buyer price is back to the starting price and buyer lost the lead", async () => {
     await expect.poll(getBuyerPrice, { timeout: 15000, message: "Harga buyer kembali ke starting price" })
+      .toBe(STARTING_PRICE);
+    await expect.poll(getConductorPrice, { timeout: 15000, message: "Current Price conductor kembali ke starting price" })
       .toBe(STARTING_PRICE);
     await expect(buyerPage.locator("text=You are not the leader >> visible=true").first()).toBeVisible({ timeout: 10000 });
     console.log(`[Verify] ✅ Price reset to ${formatPrice(STARTING_PRICE)}, buyer is not the leader`);
@@ -193,6 +203,12 @@ Then("the sale result should be shown on both sides", async ({ $testInfo }) => {
     await expect(conductorDialog.getByRole("button", { name: "Continue", exact: true })).toBeVisible({ timeout: 15000 });
     await expect(conductorDialog).not.toContainText("Unsold");
 
+    // Pemenang harus penawar yang benar-benar menawar (kode member dari riwayat conductor), bukan sekadar "ada pemenang"
+    const memberCode = await getBidderCode();
+    expect(memberCode, "Kode member penawar tidak ditemukan di riwayat conductor").toMatch(/^AX\d+$/);
+    await expect(conductorDialog, "Pemenang di dialog conductor harus penawar").toContainText(`The auction winner is ${memberCode}`);
+    expect(await getBuyerName(), "Nama buyer yang login tidak terbaca di header").not.toBe("");
+
     const buyerDialog = buyerPage.getByRole("dialog").filter({ hasText: "You are the winner" });
     await expect(buyerDialog.getByText("You are the winner")).toBeVisible({ timeout: 15000 });
 
@@ -227,7 +243,8 @@ Then("the sold lot should be listed with the final price", async ({ $testInfo })
     // cocokkan "Sold" yang tidak didahului "Un-"
     // Tabel conductor diperbarui dengan jeda setelah Continue (baris tetap "Auctioning" beberapa belas detik)
     await expect(row).toContainText(/(?<!Un-)Sold/, { timeout: 60000 });
-    await expect(row).toContainText(`${formatPrice(RESERVED_PRICE)} THB`);
+    await expect(row, "Harga akhir di tabel lot").toContainText(`${formatPrice(RESERVED_PRICE)} THB`);
+    await expect(row, "Auction Winner di tabel lot harus buyer yang login").toContainText(await getBuyerName());
     await attachScreenshot($testInfo, conductorPage, "09c - Conductor Lot Table After Sold");
   });
 });

@@ -14,6 +14,8 @@ const { When } = createBdd(test);
 export interface CreatedVehicle {
   licensePlate: string;
   province:     string;
+  title?:       string;   // judul di room (merek + model)
+  lotNumber?:   string;   // nomor lot yang diberikan sistem sesuai urutan assign
   seller?:      string;
   brand?:       string;
   groupType?:   string;
@@ -29,11 +31,11 @@ export interface CreatedVehicle {
 
 // Hardcoded vehicles — already registered in staging, reused across auction runs
 const REGRESSION_VEHICLES: CreatedVehicle[] = [
-  { licensePlate: "Z111AUT", province: "Bangkok" },
-  { licensePlate: "Z222AUT", province: "Bangkok" },
-  { licensePlate: "Z333AUT", province: "Bangkok" },
-  { licensePlate: "Z444AUT", province: "Bangkok" },
-  { licensePlate: "Z555AUT", province: "Bangkok" },
+  { licensePlate: "Z111AUT", province: "Bangkok", title: "Honda Brio",          lotNumber: "1001" },
+  { licensePlate: "Z222AUT", province: "Bangkok", title: "Daihatsu Grand Move", lotNumber: "1002" },
+  { licensePlate: "Z333AUT", province: "Bangkok", title: "Jeep Cherokee",       lotNumber: "1003" },
+  { licensePlate: "Z444AUT", province: "Bangkok", title: "Ferrari 296 GTS",     lotNumber: "1004" },
+  { licensePlate: "Z555AUT", province: "Bangkok", title: "Toyota Alphard",      lotNumber: "1005" },
 ];
 
 export const createdVehicles: CreatedVehicle[] = [...REGRESSION_VEHICLES];
