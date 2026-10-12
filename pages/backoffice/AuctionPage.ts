@@ -317,13 +317,13 @@ export class AuctionPage {
         await this.page.keyboard.press("Escape");
       }
       // Refresh page agar modal backdrop hilang
-      await this.page.reload();
+      await this.page.reload({ timeout: 60000 }).catch(() => {});
       await this.page.waitForLoadState("domcontentloaded");
       return "already_existed";
     }
 
     // Refresh page agar modal backdrop hilang dan halaman kembali bersih
-    await this.page.reload();
+    await this.page.reload({ timeout: 60000 }).catch(() => {});
     await this.page.waitForLoadState("domcontentloaded");
     return "added";
   }
@@ -336,7 +336,7 @@ export class AuctionPage {
    */
   async searchAuction(keyword: string) {
     // Refresh halaman dulu agar Livewire component dalam state bersih
-    await this.page.reload();
+    await this.page.reload({ timeout: 60000 }).catch(() => {});
     await this.page.waitForLoadState("domcontentloaded");
     await this.page.locator("#jadwallelang tbody").waitFor({ state: "visible", timeout: 15000 });
 

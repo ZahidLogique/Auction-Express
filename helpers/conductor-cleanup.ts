@@ -189,6 +189,61 @@ export async function listLeftoverFromBackoffice(page: Page, backofficeUrl: stri
     .map(({ name, id, lane }) => ({ name, id, lane }));
 }
 
+// Auction yang BELUM dimulai (termasuk yang belum di-publish karena setup gagal) bisa dikosongkan langsung di
+// backoffice: centang tiap baris vehicle, Remove Car, lalu Confirm. Auction yang sudah dimulai terkunci
+// (Remove Car nonaktif): return false supaya dilanjutkan lewat conductor.
+async function removeAllCars(page: Page, backofficeUrl: string, id: string, log: Log): Promise<boolean> {
+  await page.goto(`${backofficeUrl}/en/auction-management/auction/detail/vehicle-list/${id}/all`, { timeout: 90000 });
+  const boxes = page.locator('#tbl-vehicle tbody input[type="checkbox"]');
+  await boxes.first().waitFor({ state: "attached", timeout: 30000 }).catch(() => {});
+
+  const count = await boxes.count();
+  if (count === 0) return true;
+
+  // Checkbox wire:model tidak mendukung check(): pakai click paksa seperti di AuctionPage.
+  // Tiap klik membuat Livewire me-render ulang tabel dan bisa menghapus centang sebelumnya bila klik terlalu
+  // cepat (teramati: 5 baris diklik berurutan, hanya 1 yang tercentang). Beri jeda lalu pastikan semua tercentang.
+  const checkedBoxes = page.locator('#tbl-vehicle tbody input[type="checkbox"]:checked');
+  for (let pass = 0; pass < 4 && (await checkedBoxes.count()) < count; pass++) {
+    for (let i = 0; i < count; i++) {
+      if (!(await boxes.nth(i).isChecked().catch(() => false))) {
+        await boxes.nth(i).click({ force: true, timeout: 10000 });
+        await page.waitForTimeout(700);
+      }
+    }
+  }
+  if ((await checkedBoxes.count()) < count) {
+    log(`hanya ${await checkedBoxes.count()}/${count} baris tercentang, batal menghapus`);
+    return false;
+  }
+
+  const remove = page.locator('a.btn:has-text("Remove Car"), button.btn:has-text("Remove Car")').first();
+  const enabled = await (async () => {
+    const start = Date.now();
+    while (Date.now() - start < 6000) {
+      if (await remove.evaluate((el) => !el.classList.contains("disabled") && !(el as HTMLButtonElement).disabled).catch(() => false)) return true;
+      await page.waitForTimeout(500);
+    }
+    return false;
+  })();
+  if (!enabled) {
+    log("Remove Car nonaktif (auction sudah dimulai), lanjut lewat conductor");
+    return false;
+  }
+
+  await remove.click(ACTION);
+  await page.getByRole("button", { name: "Confirm", exact: true }).click(ACTION);
+
+  // Penghapusan butuh waktu (teramati ±8 detik per kendaraan saat dihapus satu-satu)
+  const start = Date.now();
+  while (Date.now() - start < 60000) {
+    if ((await boxes.count().catch(() => 1)) === 0) return true;
+    await page.waitForTimeout(1000);
+  }
+  log(`kendaraan belum hilang dari tabel setelah Remove Car (tersisa ${await boxes.count().catch(() => "?")})`);
+  return false;
+}
+
 // Masuk ke room conductor lewat URL langsung (bekerja untuk auction tanggal berapa pun) lalu selesaikan lane-nya.
 async function finishAuctionRoom(page: Page, roomUrl: string, name: string, log: Log): Promise<boolean> {
   await page.goto(roomUrl, { timeout: 60000 });
@@ -231,6 +286,11 @@ export async function finishLeftoverTestAuctions(
   for (const { name, id, lane } of leftovers) {
     log(`menyelesaikan "${name}"...`);
     try {
+      // Belum dimulai: kosongkan di backoffice (cepat). Sudah dimulai: selesaikan lane lewat conductor.
+      if (await removeAllCars(backofficePage, backofficeUrl, id, log)) {
+        log(`"${name}" dikosongkan (kendaraan dilepas)`);
+        continue;
+      }
       const finished = await finishAuctionRoom(conductorPage, `${conductorUrl.replace(/\/$/, "")}/conductor/${id}/${lane}`, name, log);
       log(finished ? `"${name}" selesai` : `GAGAL menyelesaikan "${name}" (lane masih terbuka)`);
     } catch (error) {
